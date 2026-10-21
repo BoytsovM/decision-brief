@@ -1,0 +1,7 @@
+{
+  "status": "не проверено",
+  "model": "Qwen3-VL-30B-A3B-Instruct",
+  "note": "Вызов не выполнен: нет DECISION_BRIEF_BASE_URL или DECISION_BRIEF_API_KEY. Числа с графиков не записывались. Файлы: K1 Inflation_tracker_02.pdf страниц 3; K2 ALFA-Macro_Insights-Policy_Rate_11Sep.pdf страниц 4; K3 ALFA-7M26.pdf страниц 4; K4 ALFA-consumption.pdf страниц 4; K5 ALFA-macro_stat1H26.pdf страниц 5; K6 ALFA_Russian_Steels_1К21PreviewUpdate_15Apr2021.pdf страниц 4; K7 FI_Strategy_3Q26_22072026.pdf страниц 27; K8 Бонд_Бриф_14092026.pdf страниц 5; K9 Gold_digest_August26.pdf страниц 8.",
+  "missing": [],
+  "rows": []
+}

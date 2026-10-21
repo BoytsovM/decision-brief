@@ -1,0 +1,10 @@
+services:
+  screen:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      DECISION_BRIEF_MODEL: ${DECISION_BRIEF_MODEL:-}
+      DECISION_BRIEF_BASE_URL: ${DECISION_BRIEF_BASE_URL:-}
+      DECISION_BRIEF_API_KEY: ${DECISION_BRIEF_API_KEY:-}
+      DECISION_BRIEF_COMPANIES: ${DECISION_BRIEF_COMPANIES:-}

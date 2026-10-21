@@ -1,0 +1,19 @@
+[project]
+name = "decision-brief"
+version = "0.1.0"
+description = "Personalized business briefs from external news and Alfa-Bank research."
+requires-python = ">=3.12"
+# The locked tree is requirements.txt. Do not loosen this pin.
+dependencies = [
+    "streamlit==1.66.0",
+]
+
+[project.scripts]
+decision-brief = "decision_brief.__main__:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

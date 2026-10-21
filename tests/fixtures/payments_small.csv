@@ -1,0 +1,9 @@
+BENEFICIARY;PAYER;PAY_AMT;PAY_CNT
+U_big;U_focal;250;2
+U_focal;U_big;150;3
+U_exact;U_focal;100;4
+U_small;U_focal;95;1
+U_outsider;U_focal;305;7
+U_focal;U_focal;100;2
+U_focal;U_focal;1000000000000;9
+U_other;U_other;999;1
