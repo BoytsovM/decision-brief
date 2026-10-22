@@ -2,9 +2,19 @@ services:
   screen:
     build: .
     ports:
-      - "8501:8501"
+      - "127.0.0.1:${DECISION_BRIEF_PORT:-8501}:8501"
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       DECISION_BRIEF_MODEL: ${DECISION_BRIEF_MODEL:-}
       DECISION_BRIEF_BASE_URL: ${DECISION_BRIEF_BASE_URL:-}
       DECISION_BRIEF_API_KEY: ${DECISION_BRIEF_API_KEY:-}
       DECISION_BRIEF_COMPANIES: ${DECISION_BRIEF_COMPANIES:-}
+      DECISION_BRIEF_PAYMENTS: ${DECISION_BRIEF_PAYMENTS:-}
+      DECISION_BRIEF_NEWS_MODE: ${DECISION_BRIEF_NEWS_MODE:-demo}

@@ -110,7 +110,7 @@ def _amount(raw: str | None) -> float | None:
         value = float(cleaned)
     except ValueError:
         return None
-    if not math.isfinite(value):
+    if not math.isfinite(value) or value <= 0:
         return None
     return value
 
@@ -120,6 +120,6 @@ def _payment_count(raw: str | None) -> int:
     if not cleaned:
         return 0
     try:
-        return int(float(cleaned))
-    except ValueError:
+        return max(0, int(float(cleaned)))
+    except (ValueError, OverflowError):
         return 0

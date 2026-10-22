@@ -165,7 +165,7 @@ def companies_source_label(path: Path) -> str:
 
 
 def load_demo_companies(path: Path) -> list[CompanyProfile]:
-    """Chat-1 demo set: a company's own revenue is at least 15 billion rubles.
+    """Chat-1 demo set: a company's own revenue is above 15 billion rubles.
 
     ``load_companies`` is unchanged. ``U_428697`` stays out via ``select_demo_companies``.
     """

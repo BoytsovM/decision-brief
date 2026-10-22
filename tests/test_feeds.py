@@ -92,6 +92,7 @@ class GradeScaleTest(unittest.TestCase):
         self.assertFalse(not_it.mentions_industry)
         it_sector = grade_text("IT-отрасль ждёт кадры", "", industry="it")
         self.assertTrue(it_sector.mentions_industry)
+        self.assertFalse(grade_text("Обзор экономики", "", industry="infrastructure").mentions_industry)
 
     def test_industry_flag_reaches_the_existing_score(self) -> None:
         company = CompanyProfile(synthetic_u="t", industry="transport")

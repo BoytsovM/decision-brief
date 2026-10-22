@@ -8,3 +8,6 @@ data/raw
 _rss_probe
 .env
 .streamlit/secrets.toml
+
+.env.*
+release

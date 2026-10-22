@@ -1,0 +1,80 @@
+{
+  "source": "Case appendix 2 public folder",
+  "folder_url": "https://drive.google.com/drive/folders/15xZTLF1lZ65p6o5xpNA_fRbxjoV-UlG1",
+  "checked_on": "2026-10-22",
+  "notes": "Short paraphrases only; full PDF files are not redistributed. K9 publication day retained from the original repository; document specifies August 2026, exact publication day not confirmed.",
+  "documents": [
+    {
+      "card_id": "K1",
+      "filename": "Inflation_tracker_02.pdf",
+      "source_url": "https://drive.google.com/file/d/19iW3Ph8_wO0HHQY7Ik4lTfC3jRc9gjWV/view",
+      "pages": "1",
+      "sha256": "09d5537f6a52f5f8f2d9518ed9171e794382972ce38cbdc4bd3099b2db129d0c",
+      "verification": "visual review of cited pages"
+    },
+    {
+      "card_id": "K2",
+      "filename": "ALFA-Macro_Insights-Policy_Rate_11Sep.pdf",
+      "source_url": "https://drive.google.com/file/d/1shHG89LtMgHT1_uEebHmQSFZe_zbeq7-/view",
+      "pages": "1-2",
+      "sha256": "92a96805f2b720f76bd0c52d2491044812b38401ab62d0f4a9157b4ca81c49bb",
+      "verification": "visual review of cited pages"
+    },
+    {
+      "card_id": "K3",
+      "filename": "ALFA-7M26.pdf",
+      "source_url": "https://drive.google.com/file/d/1HZDq3WGRFdzgm1TZ5hWL23Q3I9c2Eq64/view",
+      "pages": "1",
+      "sha256": "3c64c1e43f3b46a795f9581967f2dbc8efb0994cb77ab82e95da180830e9ff8c",
+      "verification": "visual review of cited pages"
+    },
+    {
+      "card_id": "K4",
+      "filename": "ALFA-consumption.pdf",
+      "source_url": "https://drive.google.com/file/d/1riR1lhsb6EY1MwGMxdBlS_tI5ed9mIiz/view",
+      "pages": "1",
+      "sha256": "807ee9925cf7d15ecffc72ad7142f9a83d342cd19690e12dd3b90aa2ba8ea1c6",
+      "verification": "visual review of cited pages"
+    },
+    {
+      "card_id": "K5",
+      "filename": "ALFA-macro_stat1H26.pdf",
+      "source_url": "https://drive.google.com/file/d/1khcHwoS0FkG9p_0J4XoHGaGq3B4V0ime/view",
+      "pages": "1",
+      "sha256": "84899553fadf3e49abac7074c7b7d2afc2fa5c70b7fde0bf4c3eabe3d7402266",
+      "verification": "visual review of cited pages"
+    },
+    {
+      "card_id": "K6",
+      "filename": "ALFA_Russian_Steels_1К21PreviewUpdate_15Apr2021.pdf",
+      "source_url": "https://drive.google.com/file/d/1yLCBrIoyIsubLTEBvBHh6io48ysnW-wn/view",
+      "pages": "",
+      "sha256": "36eaaa58ae68d858db3600dbf3cc93d0bdefb8ca03f1f5cc154c532cc32e0c86",
+      "verification": "historical note; not used in current analysis"
+    },
+    {
+      "card_id": "K7",
+      "filename": "FI_Strategy_3Q26_22072026.pdf",
+      "source_url": "https://drive.google.com/file/d/1hq3Fhyz9ce_sRyGUQB1MdoHeQdfAJfhK/view",
+      "pages": "10",
+      "sha256": "6c3a4882ee784b608880693d8ba2b62d0ba2236e34b404179adaab909c6dd046",
+      "verification": "visual review of cited pages"
+    },
+    {
+      "card_id": "K8",
+      "filename": "Бонд_Бриф_14092026.pdf",
+      "source_url": "https://drive.google.com/file/d/1bPzix_332N2CyMY0tqCHuYtGsfJWnFGv/view",
+      "pages": "1",
+      "sha256": "87dc17520e2a744f95580ee2ec42461d0ee6ebf19e752622a49c49600cb1b055",
+      "verification": "visual review of cited pages"
+    },
+    {
+      "card_id": "K9",
+      "filename": "Gold_digest_August26.pdf",
+      "source_url": "https://drive.google.com/file/d/1a7TXOCHARfKzUR0hn9Cm9gQSrIldxTDE/view",
+      "pages": "2-3",
+      "sha256": "4159576a6223985dd318b6f5a04ad4aeb888f47a6c266d0e9ee9eb35bf01e245",
+      "verification": "visual review of cited pages"
+    }
+  ]
+}

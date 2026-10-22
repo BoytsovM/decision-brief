@@ -48,6 +48,7 @@ class CompanyProfile:
     foreign_owner: bool = False
     staff_over_100: bool = False
     rapid_growth: bool = False
+    missing_fields: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,8 @@ class BankCard:
     fresh: bool = True
     page: str = ""
     theses: tuple[BankThesis, ...] = field(default_factory=tuple)
+    source_url: str = ""
+    source_note: str = ""
 
 
 @dataclass(frozen=True)

@@ -157,20 +157,19 @@ class DraftSeparationTest(unittest.TestCase):
         self.assertEqual(loaded.rows[0].status, UNVERIFIED)
         self.assertEqual(loaded.missing, ("K9",))
         self.assertEqual(readings_for_user_response(loaded), ())
-        self.assertTrue(all(card.page == "" for card in BANK_CARDS))
+        self.assertEqual(cards_missing_page(), ("K6",))
         self.assertEqual(
             cards_missing_page(),
-            ("K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8", "K9"),
+            ("K6",),
         )
 
     def test_gap_list_matches_cards_and_leaves_them_empty(self) -> None:
         targets = gap_page_targets()
         self.assertEqual(
             tuple(item.card_id for item in targets),
-            ("K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8", "K9"),
+            ("K6",),
         )
         filenames = {item.card_id: item.filename for item in targets}
-        self.assertEqual(filenames["K2"], "ALFA-Macro_Insights-Policy_Rate_11Sep.pdf")
         self.assertEqual(filenames["K6"], "ALFA_Russian_Steels_1K21.pdf")
         self.assertTrue(
             pdf_name_matches(
@@ -179,7 +178,7 @@ class DraftSeparationTest(unittest.TestCase):
             )
         )
         self.assertFalse(pdf_name_matches("ALFA-7M26.pdf", "ALFA-consumption.pdf"))
-        self.assertTrue(all(card.page == "" for card in BANK_CARDS))
+        self.assertEqual(cards_missing_page(), ("K6",))
 
     def test_stored_draft_stays_beside_the_cards_and_out_of_the_answer(self) -> None:
         path = default_draft_path()
@@ -189,7 +188,7 @@ class DraftSeparationTest(unittest.TestCase):
         self.assertEqual(loaded.status, UNVERIFIED)
         self.assertTrue(all(row.status == UNVERIFIED for row in loaded.rows))
         self.assertEqual(readings_for_user_response(loaded), ())
-        self.assertTrue(all(card.page == "" for card in BANK_CARDS))
+        self.assertEqual(cards_missing_page(), ("K6",))
 
 
 class FeedIndependenceTest(unittest.TestCase):
