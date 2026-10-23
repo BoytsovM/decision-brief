@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from datetime import date
+from pathlib import Path
 from urllib.parse import urlsplit
 
 import streamlit as st
@@ -23,7 +24,23 @@ from decision_brief.screen import (
 )
 
 
+def _apply_local_env() -> None:
+    """Fill missing settings from the gitignored .env. Never override the process."""
+    path = Path(__file__).resolve().parents[2] / ".env"
+    if not path.is_file():
+        return
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key.startswith("DECISION_BRIEF_") and key not in os.environ:
+            os.environ[key] = value.strip().strip('"').strip("'")
+
+
 def main():
+    _apply_local_env()
     st.set_page_config(page_title="Decision Brief | Альфа-Бизнес", page_icon="А", layout="wide")
     st.markdown("<style>.stApp h1{letter-spacing:-.035em} div[data-testid='stMetricValue']{color:#ef3124}</style>", unsafe_allow_html=True)
     st.sidebar.title("Альфа-Бизнес")

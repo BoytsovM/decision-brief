@@ -258,6 +258,15 @@ class ModelConclusionTest(unittest.TestCase):
         )
         self.assertNotIn("api.openai.com", chat_completions_url("https://gateway.internal/v1"))
 
+    def test_gateway_slug_is_accepted_and_translated(self) -> None:
+        from decision_brief.conclusion import allowed_model, gateway_model_id
+
+        self.assertTrue(allowed_model("z-ai/glm-5.3-flash"))
+        self.assertTrue(allowed_model("GLM-5.3-Flash"))
+        self.assertEqual(gateway_model_id("GLM-5.3-Flash"), "z-ai/glm-5.3-flash")
+        self.assertEqual(gateway_model_id("z-ai/glm-5.3-flash"), "z-ai/glm-5.3-flash")
+        self.assertFalse(allowed_model("qwen/qwen3-vl-30b-a3b-instruct"))
+
 
 if __name__ == "__main__":
     unittest.main()

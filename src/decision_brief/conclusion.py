@@ -31,10 +31,37 @@ ALLOWED_TEXT_MODELS = (
     "DeepSeek-V4.1-Flash", "Kimi-K2.6",
 )
 
+# Ids the case gateway requires. Display names stay accepted.
+GATEWAY_MODEL_IDS = {
+    "Gemma 4 26B A4B": "google/gemma-4-26b-a4b-it",
+    "GLM-5.3-Flash": "z-ai/glm-5.3-flash",
+    "Qwen3.6 35B A3B": "qwen/qwen3.6-35b-a3b",
+    "DeepSeek-V4.1-Flash": "deepseek/deepseek-v4.1-flash",
+    "Kimi-K2.6": "moonshotai/kimi-k2.6",
+}
+
+
+def _model_key(name: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", name.casefold())
+
 
 def allowed_model(name: str) -> bool:
-    normalize = lambda value: re.sub(r"[^a-z0-9]", "", value.casefold())
-    return normalize(name) in {normalize(value) for value in ALLOWED_TEXT_MODELS}
+    """Accept a case display name or the gateway slug. Vision models stay out."""
+    if _is_vision_model(name):
+        return False
+    folded = _model_key(name)
+    allowed = {_model_key(value) for value in ALLOWED_TEXT_MODELS}
+    allowed.update(_model_key(value) for value in GATEWAY_MODEL_IDS.values())
+    return folded in allowed
+
+
+def gateway_model_id(name: str) -> str:
+    """Return the provider id the case gateway expects."""
+    folded = _model_key(name)
+    for display, gateway in GATEWAY_MODEL_IDS.items():
+        if folded in {_model_key(display), _model_key(gateway)}:
+            return gateway
+    return name
 
 
 def valid_gateway(url: str) -> bool:
@@ -111,7 +138,7 @@ class GatewayClient:
         url = chat_completions_url(self.base_url)
         body = json.dumps(
             {
-                "model": self.model,
+                "model": gateway_model_id(self.model),
                 "temperature": 0,
                 "max_tokens": 1200,
                 "messages": [
