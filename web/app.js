@@ -417,9 +417,10 @@ function renderFeed() {
   const cards = rows.length
     ? rows.map((item) => `
       <button class="feed-card" type="button" data-go="card" data-item="${esc(item.id)}">
-        <div class="meta-row">
+        <div class="meta-row feed-meta">
           ${importance(item.level, item.label)}
           <span class="caption">${esc(item.published)} · ${esc(item.source_name)}</span>
+          <span class="caption event-score">Значимость ${esc(item.score)}</span>
         </div>
         <h2 class="h3">${esc(item.title)}</h2>
         <p class="body muted">Почему вам: ${esc(item.why)}</p>

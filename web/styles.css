@@ -536,6 +536,15 @@ select.company {
   gap: 12px;
 }
 
+.feed-meta {
+  flex-wrap: wrap;
+}
+
+.event-score {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 .filters {
   display: flex;
   flex-wrap: wrap;
