@@ -547,6 +547,14 @@ select.company {
   color: var(--origin-ai-text);
 }
 
+.callout > .btn {
+  align-self: flex-start;
+}
+
+.profile-card-edit > .btn {
+  align-self: flex-start;
+}
+
 .back {
   font-size: 13px;
   font-weight: 600;
