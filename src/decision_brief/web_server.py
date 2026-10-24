@@ -3,10 +3,10 @@
 ``demo`` is the default: synthetic companies, the fixed scenario date
 and the sample news file. ``live`` re-reads public RSS on a short
 cadence. A failed refresh keeps the previous live feed and says so.
-The feed list and an opened card do not call a model. The card
-shows the stored conclusion. ``/api/card-model`` is kept for a later
-pass and is not used by the screens. ``/api/analysis`` still answers
-a follow-up question.
+The feed list does not call a model. Opening a card calls it once.
+The question and the «Ответить» button in that block call it again
+through ``/api/card-answer``. ``/api/analysis`` still answers the
+field under the card.
 """
 
 from __future__ import annotations
@@ -69,6 +69,7 @@ _LIVE_NOTICE = ""
 _LIVE_AT = ""
 _EXTRAS: dict[str, list[NewsItem]] = {"demo": [], "live": []}
 _MODEL_CACHE: dict[tuple[str, str, str, str], str] = {}
+_ANSWER_CACHE: dict[tuple[str, str, str, str, str], str] = {}
 _LIVE_REFRESH_SECONDS = 10
 _REFRESH_GUARD = threading.Lock()
 _LIVE_THREAD: threading.Thread | None = None
@@ -229,6 +230,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/analysis":
             status, answer = _analysis(payload)
+            self._json(status, answer)
+            return
+        if parsed.path == "/api/card-answer":
+            status, answer = _card_answer(payload)
             self._json(status, answer)
             return
         self.send_error(404)
@@ -404,6 +409,55 @@ def _settle_shown_text(text: str, scored: object) -> str:
         if sentence:
             kept.append(sentence if sentence.endswith(".") else f"{sentence}.")
     return " ".join(kept)
+
+
+def _card_answer(payload: dict[str, object]) -> tuple[int, dict[str, object]]:
+    """One model answer to the question already shown in block 05."""
+    mode = _mode_value(payload.get("mode"))
+    query = {
+        "company": [str(payload.get("company") or "")],
+        "role": [str(payload.get("role") or "")],
+        "item": [str(payload.get("item") or "")],
+    }
+    company, role, error = _selection(mode, query)
+    if error is not None:
+        return error
+    item_id = str(payload.get("item") or "")
+    asked = " ".join(str(payload.get("question") or "").split())[:500]
+    if not item_id or not asked:
+        return 400, {"error": "Нужны событие и вопрос."}
+    cache_key = (mode, company.synthetic_u, role.value, item_id, asked)
+    with _LOCK:
+        cached = _ANSWER_CACHE.get(cache_key, "")
+    if cached:
+        return 200, {"answer": cached, "status": "cached"}
+    try:
+        items, _notice, _loaded = _items(mode, refresh=False)
+    except OSError:
+        return 502, {"error": "Лента не прочиталась."}
+    scored = parsed_feed(company, items, role, as_of=_scenario_date(mode))
+    match = next((row for row in scored if row.item.source_url == item_id), None)
+    if match is None:
+        return 404, {"error": "Событие не найдено в ленте."}
+    client = client_from_env()
+    if client is None:
+        return 200, {"answer": "", "status": "unavailable", "error": "Шлюз не настроен."}
+    prompt = build_model_prompt(company, match, role=role) + (
+        "\nОтветь на вопрос клиента. Добавь в JSON ключ «ответ»: "
+        "одно или два коротких предложения по полям выше. "
+        "Если данных нет, так и напиши. Слово «почему» не пиши.\n"
+        f"Вопрос: {asked}"
+    )
+    try:
+        parts = reader_model_parts(client.complete(prompt), prompt)
+    except ModelCallError:
+        return 200, {"answer": "", "status": "failed", "error": "Вызов модели не выполнен."}
+    answer = _settle_shown_text(parts.get("answer", ""), match)
+    if not answer:
+        return 200, {"answer": "", "status": "empty", "error": "Модель не ответила на вопрос."}
+    with _LOCK:
+        _ANSWER_CACHE[cache_key] = answer
+    return 200, {"answer": answer, "status": "ready"}
 
 
 def _cached_model(cached: str) -> dict[str, object]:

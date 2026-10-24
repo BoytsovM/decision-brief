@@ -13,8 +13,6 @@ function initialMode() {
   return requested === "live" ? "live" : "demo";
 }
 
-const MODEL_LATER = "Модель на просмотр ленты не вызывается. Вывод появится только по отдельному запросу анализа.";
-
 const state = {
   screen: "home",
   filter: "",
@@ -39,7 +37,10 @@ const state = {
   cardModels: {},
   cardEffects: {},
   cardTitles: {},
+  cardQuestions: {},
+  cardAnswers: {},
   cardModelPending: "",
+  cardAnswerPending: "",
   replyQuestion: "",
   askOpen: false,
   managerNote: "",
@@ -491,7 +492,8 @@ function renderCard() {
       </main>`;
   }
   const card = item.card;
-  const modelText = card.model || MODEL_LATER;
+  const modelText = cardModelText(item) || "Модель готовит вывод по этому событию.";
+  const modelAside = cardModelText(item) ? "Синтез ИИ" : "Запрос к шлюзу";
   return `
     <main class="screen">
       ${header("feed")}
@@ -510,8 +512,9 @@ function renderCard() {
           ${effectsBlock(card, item)}
           ${block("bank", "04", "ПОЗИЦИЯ БАНКА", "Материал банка", `
             <div class="claim">${origin("bank")}<div class="stack">${bankParagraphs(card.bank)}</div></div>`)}
-          ${block("ai", "05", "ВЫВОД МОДЕЛИ", "По запросу анализа", `
-            <div class="claim">${origin("ai")}<p class="body">${esc(modelText)}</p></div>`)}
+          ${block("ai", "05", "ВЫВОД МОДЕЛИ", modelAside, `
+            <div class="claim">${origin("ai")}<div class="stack">${modelParagraphs(modelText)}</div></div>
+            ${modelQuestionBar(item)}`)}
           ${block("ink", "06", "ПЕРЕХОД К ИСТОЧНИКУ", "Основания вывода", `
             <p class="body">${esc(item.source_name)} · <a class="text-btn" href="${esc(item.source_url)}" target="_blank" rel="noopener noreferrer">открыть материал</a> · <button class="text-btn" type="button" data-go="source" data-item="${esc(item.id)}">карточка источника</button></p>
             ${card.signs ? `<p class="body">${esc(card.signs)}</p>` : ""}`)}
@@ -708,7 +711,7 @@ function renderSource() {
           <h2 class="h3" style="width:420px;max-width:100%">${esc(displayTitle(item))}</h2>
           <div class="snippet"><b>01 ФАКТ</b><span>${esc(card.happened)}</span></div>
           <div class="snippet"><b>04 ПОЗИЦИЯ БАНКА</b><span>${esc(card.bank)}</span></div>
-          <div class="snippet"><b>05 ВЫВОД МОДЕЛИ</b><span>${esc(card.model || MODEL_LATER)}</span></div>
+          <div class="snippet"><b>05 ВЫВОД МОДЕЛИ</b><span>${esc(cardModelText(item) || "Модель готовит вывод по этому событию.")}</span></div>
           <p class="caption" style="width:420px;max-width:100%">Карточка остаётся открытой: можно продолжить работу</p>
         </section>
         <article class="doc">
@@ -808,6 +811,17 @@ function paint() {
       go("feed");
     });
   }
+  const reply = root.querySelector("[data-reply]");
+  if (reply) {
+    reply.addEventListener("click", () => {
+      const question = reply.getAttribute("data-reply") || "";
+      const item = selected();
+      if (!question || !item || state.cardAnswerPending === item.id) {
+        return;
+      }
+      askModel(item.id, question);
+    });
+  }
   root.querySelectorAll("[data-ask]").forEach((form) => {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -836,6 +850,7 @@ function paint() {
     });
   }
   scheduleFeedWindow();
+  ensureCardModel();
 }
 
 function displayTitle(item) {
@@ -843,6 +858,61 @@ function displayTitle(item) {
     return "";
   }
   return state.cardTitles[item.id] || item.headline || item.title;
+}
+
+function modelQuestionBar(item) {
+  const stored = item && state.cardQuestions[item.id] ? state.cardQuestions[item.id] : "";
+  const question = stored.replace(/^вопрос:\s*/i, "").replace(/\.$/, "");
+  const pending = item && state.cardAnswerPending === item.id;
+  const answer = item && state.cardAnswers[item.id] ? state.cardAnswers[item.id] : "";
+  const reply = answer
+    ? `<div class="claim">${origin("ai")}<div class="stack">${modelParagraphs(answer)}</div></div>`
+    : pending
+      ? `<p class="caption">Модель отвечает на вопрос.</p>`
+      : "";
+  if (!question) {
+    if (item && state.cardModelPending === item.id) {
+      return `<div class="ask-inline"><p>Модель формулирует вопрос.</p></div>`;
+    }
+    return "";
+  }
+  return `<div class="ask-inline"><p>Вопрос: ${esc(question)}</p><button class="btn btn-secondary" type="button" data-reply="${esc(question)}">Ответить</button></div>${reply}`;
+}
+
+function askModel(itemId, question) {
+  state.cardAnswerPending = itemId;
+  state.askOpen = false;
+  paint();
+  fetch("/api/card-answer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      mode: state.mode,
+      company: state.companyId,
+      role: state.roleId,
+      item: itemId,
+      question,
+    }),
+  })
+    .then(async (response) => {
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Вызов модели не выполнен.");
+      }
+      state.cardAnswers[itemId] = payload.answer || payload.error || "Модель не ответила на вопрос.";
+    })
+    .catch((error) => {
+      state.cardAnswers[itemId] = error instanceof Error ? error.message : "Вызов модели не выполнен.";
+    })
+    .finally(() => {
+      if (state.cardAnswerPending === itemId) {
+        state.cardAnswerPending = "";
+      }
+      const current = selected();
+      if (current && current.id === itemId && state.screen === "card") {
+        paint();
+      }
+    });
 }
 
 function cardModelText(item) {
@@ -855,7 +925,6 @@ function cardModelText(item) {
   return item.card && item.card.model ? item.card.model : "";
 }
 
-// Kept for the later model block. The screens do not call it.
 function ensureCardModel() {
   if (state.screen !== "card" && state.screen !== "source") {
     return;
@@ -885,6 +954,9 @@ function ensureCardModel() {
       state.cardEffects[itemId] = payload.effects || {};
       if (payload.headline) {
         state.cardTitles[itemId] = payload.headline;
+      }
+      if (payload.question) {
+        state.cardQuestions[itemId] = payload.question;
       }
     })
     .catch((error) => {
