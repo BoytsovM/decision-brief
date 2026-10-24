@@ -510,31 +510,39 @@ _SIGN_RU: dict[str, str] = {
 }
 
 
-def _reader_fact(text: str) -> str:
-    """A short paragraph from the article, not one clipped sentence.
+def _points_at_outlet(sentence: str) -> bool:
+    """True when a line only sends the reader to the publication.
 
-    The sentence with the figure stays first. When the article itself is
-    only a line or two and gives no figure, one extra sentence says what
-    the text does not contain. It does not invent a number.
+    The outlet is already named in the last card block, so the fact
+    does not repeat it.
+    """
+    folded = sentence.casefold()
+    return "в материале" in folded or "читайте в" in folded
+
+
+def _reader_fact(text: str) -> str:
+    """Three or four opening lines of this event, in the article's own order.
+
+    The card title is this same event. A later sentence with a number is
+    not pulled forward, a line that only names the outlet is left out,
+    and nothing is added that the article did not say.
     """
     sentences = _sentences(text)
     if not sentences:
         return text.strip()
-    ordered = _ordered_fact_sentences(sentences)
     kept: list[str] = []
-    for sentence in ordered:
+    for sentence in sentences:
+        if _points_at_outlet(sentence):
+            continue
         candidate = " ".join([*kept, sentence])
-        if kept and len(candidate) > 560:
+        if kept and len(candidate) > 420:
             break
         kept.append(sentence)
         if len(kept) >= 4:
             break
-    paragraph = " ".join(kept)
-    if len(paragraph) >= 200 or any(char.isdigit() for char in paragraph):
-        return paragraph
-    gloss = _short_fact_gloss(paragraph)
-    pieces = kept + (_sentences(gloss) if gloss else [])
-    return _paragraph(pieces)
+    if not kept:
+        return sentences[0]
+    return " ".join(kept)
 
 
 def _ordered_fact_sentences(sentences: list[str]) -> list[str]:

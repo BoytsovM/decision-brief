@@ -837,7 +837,60 @@ select.company {
 }
 
 .own-ask {
-  margin-top: 8px;
+  margin-top: 0;
+}
+
+.own-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.ai-wait {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+}
+
+.ai-wait i {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--origin-ai-text);
+  animation: ai-run 0.9s infinite ease-in-out;
+}
+
+.ai-wait i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.ai-wait i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes ai-run {
+  0% {
+    transform: translateX(0);
+    opacity: 0.25;
+  }
+  40% {
+    transform: translateX(8px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 0.25;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-wait i {
+    animation: none;
+    opacity: 1;
+  }
 }
 
 .composer {

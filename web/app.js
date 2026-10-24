@@ -42,10 +42,9 @@ const state = {
   cardModelPending: "",
   cardAnswerPending: "",
   ownDraft: {},
-  ownAsked: {},
-  ownAnswers: {},
-  ownNotes: {},
+  ownThreads: {},
   ownPending: "",
+  ownPendingQuestion: "",
   replyQuestion: "",
   askOpen: false,
   managerNote: "",
@@ -513,8 +512,13 @@ function renderCard() {
       </main>`;
   }
   const card = item.card;
-  const modelText = cardModelText(item) || "Модель готовит вывод по этому событию.";
-  const modelAside = cardModelText(item) ? "Синтез ИИ" : "Запрос к шлюзу";
+  const modelText = cardModelText(item);
+  const modelAside = modelText ? "Синтез ИИ" : "Запрос к шлюзу";
+  const modelBody = modelText
+    ? `<div class="claim">${origin("ai")}<div class="stack">${modelParagraphs(modelText)}</div></div>`
+    : state.cardModelPending === item.id
+      ? aiWait()
+      : `<div class="claim">${origin("ai")}<div class="stack">${modelParagraphs("Модель готовит вывод по этому событию.")}</div></div>`;
   return `
     <main class="screen">
       ${header("feed")}
@@ -526,7 +530,7 @@ function renderCard() {
             <span class="caption">${esc(item.published)} · ${esc(item.source_name)}</span>
           </div>
           <h1 class="h1">${esc(displayTitle(item))}</h1>
-          ${block("ink", "01", "ФАКТ", esc(item.source_name), `
+          ${block("ink", "01", "ФАКТ", "", `
             <div class="claim">${origin("fact")}<div class="stack">${prose(card.happened)}</div></div>`)}
           ${block("mid", "02", "СВЯЗЬ С КОМПАНИЕЙ", "Профиль компании", `
             <div class="claim">${origin("fact")}<div class="stack">${prose(card.why || "Для этого события ранжирование не назвало отдельную причину.")}</div></div>`)}
@@ -534,7 +538,7 @@ function renderCard() {
           ${block("bank", "04", "ПОЗИЦИЯ БАНКА", "Материал банка", `
             <div class="claim">${origin("bank")}<div class="stack">${bankParagraphs(card.bank)}</div></div>`)}
           ${block("ai", "05", "ВЫВОД МОДЕЛИ", modelAside, `
-            <div class="claim">${origin("ai")}<div class="stack">${modelParagraphs(modelText)}</div></div>
+            ${modelBody}
             ${modelQuestionBar(item)}
             ${ownQuestionForm(item)}`)}
           ${block("ink", "06", "ПЕРЕХОД К ИСТОЧНИКУ", "Основания вывода", `
@@ -834,7 +838,7 @@ function paint() {
       const item = selected();
       const field = form.querySelector("input");
       const question = field ? field.value.trim() : "";
-      if (!item || !question || state.ownPending === item.id || state.ownAnswers[item.id]) {
+      if (!item || !question || state.ownPending === item.id) {
         return;
       }
       state.ownDraft[item.id] = "";
@@ -887,41 +891,46 @@ function displayTitle(item) {
   if (!item) {
     return "";
   }
-  return state.cardTitles[item.id] || item.headline || item.title;
+  return item.title || item.headline || "";
+}
+
+function aiWait() {
+  return `<div class="claim">${origin("ai")}<span class="ai-wait" role="status" aria-label="Модель отвечает"><i></i><i></i><i></i></span></div>`;
+}
+
+function ownPair(row) {
+  const bar = `<div class="ask-inline"><p>Вопрос: ${esc(row.question)}</p></div>`;
+  if (row.note) {
+    return `${bar}<p class="own-reject">${esc(row.note)}</p>`;
+  }
+  return `${bar}<div class="claim">${origin("ai")}<div class="stack">${modelParagraphs(row.answer)}</div></div>`;
 }
 
 function ownQuestionForm(item) {
   if (!item || !state.cardAnswers[item.id]) {
     return "";
   }
-  const answer = state.ownAnswers[item.id] || "";
-  if (answer) {
-    const asked = state.ownAsked[item.id] || "";
-    const bar = asked
-      ? `<div class="ask-inline"><p>Вопрос: ${esc(asked)}</p></div>`
-      : "";
-    const note = state.ownNotes[item.id]
-      ? `<p class="own-reject">${esc(state.ownNotes[item.id])}</p>`
-      : "";
-    return `${bar}<div class="claim">${origin("ai")}<div class="stack">${modelParagraphs(answer)}</div></div>${note}`;
-  }
+  const rows = state.ownThreads[item.id] || [];
+  const history = rows.map((row) => ownPair(row)).join("");
   const pending = state.ownPending === item.id;
-  const field = pending
-    ? `<p class="caption">Модель отвечает на ваш вопрос.</p>`
+  const waiting = pending
+    ? `${state.ownPendingQuestion ? `<div class="ask-inline"><p>Вопрос: ${esc(state.ownPendingQuestion)}</p></div>` : ""}${aiWait()}`
     : `<form class="composer own-ask" data-own="1">
         <input name="followup" type="text" maxlength="240" autocomplete="off" placeholder="Хотите задать свой вопрос?" value="">
         <button class="btn btn-secondary" type="submit">Спросить</button>
       </form>`;
-  const note = state.ownNotes[item.id]
-    ? `<p class="own-reject">${esc(state.ownNotes[item.id])}</p>`
-    : "";
-  return `${field}${note}`;
+  return `<div class="own-thread">${history}${waiting}</div>`;
+}
+
+function rememberOwn(itemId, question, answer, note) {
+  const thread = state.ownThreads[itemId] ? state.ownThreads[itemId].slice() : [];
+  thread.push({ question, answer, note });
+  state.ownThreads[itemId] = thread;
 }
 
 function askOwn(itemId, question) {
-  state.ownAsked[itemId] = question;
   state.ownPending = itemId;
-  state.ownNotes[itemId] = "";
+  state.ownPendingQuestion = question;
   state.askOpen = false;
   paint();
   fetch("/api/card-answer", {
@@ -945,22 +954,26 @@ function askOwn(itemId, question) {
     })
     .then((payload) => {
       if (payload.status === "rejected" || payload.status === "unavailable" || payload.status === "failed" || payload.status === "empty") {
-        state.ownNotes[itemId] = payload.error || "Модель не ответила на вопрос.";
+        rememberOwn(itemId, question, "", payload.error || "Модель не ответила на вопрос.");
         return;
       }
-      state.ownAnswers[itemId] = payload.answer || payload.error || "Модель не ответила на вопрос.";
-      state.ownNotes[itemId] = "";
+      rememberOwn(itemId, question, payload.answer || payload.error || "Модель не ответила на вопрос.", "");
     })
     .catch((error) => {
-      state.ownNotes[itemId] = error instanceof Error ? error.message : "Вызов модели не выполнен.";
+      rememberOwn(itemId, question, "", error instanceof Error ? error.message : "Вызов модели не выполнен.");
     })
     .finally(() => {
       if (state.ownPending === itemId) {
         state.ownPending = "";
+        state.ownPendingQuestion = "";
       }
       const current = selected();
       if (current && current.id === itemId && state.screen === "card") {
         paint();
+        const field = document.querySelector("[data-own] input");
+        if (field) {
+          field.focus();
+        }
       }
     });
 }
@@ -973,15 +986,12 @@ function modelQuestionBar(item) {
   const reply = answer
     ? `<div class="claim">${origin("ai")}<div class="stack">${modelParagraphs(answer)}</div></div>`
     : pending
-      ? `<p class="caption">Модель отвечает на вопрос.</p>`
+      ? aiWait()
       : "";
   if (!question) {
-    if (item && state.cardModelPending === item.id) {
-      return `<div class="ask-inline"><p>Модель формулирует вопрос.</p></div>`;
-    }
     return "";
   }
-  const button = answer
+  const button = answer || pending
     ? ""
     : `<button class="btn btn-secondary" type="button" data-reply="${esc(question)}">Ответить</button>`;
   return `<div class="ask-inline"><p>Вопрос: ${esc(question)}</p>${button}</div>${reply}`;
@@ -1043,6 +1053,17 @@ function ensureCardModel() {
   }
   const itemId = item.id;
   state.cardModelPending = itemId;
+  queueMicrotask(() => {
+    const current = selected();
+    if (
+      current
+      && current.id === itemId
+      && state.cardModelPending === itemId
+      && !cardModelText(current)
+    ) {
+      paint();
+    }
+  });
   const params = new URLSearchParams({
     mode: state.mode,
     company: state.companyId,

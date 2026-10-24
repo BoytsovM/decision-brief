@@ -75,7 +75,7 @@ _LIVE_AT = ""
 _EXTRAS: dict[str, list[NewsItem]] = {"demo": [], "live": []}
 _MODEL_CACHE: dict[tuple[str, str, str, str], str] = {}
 _ANSWER_CACHE: dict[tuple[str, str, str, str, str], str] = {}
-_OWN_CACHE: dict[tuple[str, str, str, str], str] = {}
+_OWN_CACHE: dict[tuple[str, str, str, str, str], str] = {}
 _LIVE_REFRESH_SECONDS = 10
 _REFRESH_GUARD = threading.Lock()
 _LIVE_THREAD: threading.Thread | None = None
@@ -605,7 +605,7 @@ def _own_answer(
     item_id: str,
     asked: str,
 ) -> tuple[int, dict[str, object]]:
-    """One accepted answer per card. A refusal leaves the slot free."""
+    """An answer for this question. A refusal is not stored."""
     try:
         items, _notice, _loaded = _items(mode, refresh=False)
     except OSError:
@@ -617,11 +617,11 @@ def _own_answer(
     refusal = question_on_page(asked, _page_context(company, match))
     if refusal:
         return 200, {"answer": "", "status": "rejected", "error": refusal}
-    slot = (mode, company.synthetic_u, role.value, item_id)
+    cache_key = (mode, company.synthetic_u, role.value, item_id, asked)
     with _LOCK:
-        previous = _OWN_CACHE.get(slot, "")
+        previous = _OWN_CACHE.get(cache_key, "")
     if previous:
-        return 200, {"answer": previous, "status": "used"}
+        return 200, {"answer": previous, "status": "cached"}
     client = client_from_env()
     if client is None:
         return 200, {"answer": "", "status": "unavailable", "error": "Шлюз не настроен."}
@@ -645,7 +645,7 @@ def _own_answer(
     if "не подходит к контексту" in answer.casefold():
         return 200, {"answer": "", "status": "rejected", "error": _OFF_TOPIC}
     with _LOCK:
-        _OWN_CACHE[slot] = answer
+        _OWN_CACHE[cache_key] = answer
     return 200, {"answer": answer, "status": "ready"}
 
 

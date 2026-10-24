@@ -11,7 +11,7 @@ from decision_brief.feeds import parse_rss
 from decision_brief.models import NewsItem
 from decision_brief.roles import Role
 from decision_brief.screen import NewsLoad, load_demo_companies, sample_companies_path
-from decision_brief.web_api import build_feed, plain_text
+from decision_brief.web_api import _reader_fact, build_feed, plain_text
 from decision_brief.web_server import combine_live, question_on_page, user_events
 
 _RSS = Path(__file__).resolve().parent / "fixtures" / "rss"
@@ -78,6 +78,20 @@ class FeedPayloadTest(unittest.TestCase):
     def test_plain_text_strips_markup(self) -> None:
         self.assertEqual(plain_text("<b>Ставка</b>  <!--x-->  14"), "Ставка 14")
 
+    def test_fact_leaves_out_the_outlet_redirect(self) -> None:
+        text = (
+            "Банк России 23 октября второй раз подряд оставил ключевую ставку "
+            "на уровне 14% годовых. Продолжить снижение не позволяет инфляция: "
+            "цены растут быстрее, чем рассчитывал регулятор. Аналитики допустили, "
+            "что пауза продлится до конца года. Как изменятся условия в банках "
+            'и что будет с курсом рубля — в материале "Газеты.Ru".'
+        )
+        fact = _reader_fact(text)
+        self.assertNotIn("Газет", fact)
+        self.assertNotIn("материале", fact.casefold())
+        self.assertIn("14%", fact)
+        self.assertIn("пауза продлится", fact)
+
     def test_parsed_story_stays_visible_when_it_misses_the_horeca_threshold(self) -> None:
         items = demo_news()
         companies = load_demo_companies(sample_companies_path())
@@ -111,7 +125,7 @@ class FeedPayloadTest(unittest.TestCase):
         happened = str(carrier_rate["card"]["happened"])
         self.assertIn("сохранил ключевую ставку", happened)
         self.assertIn("не смягчаются", happened)
-        self.assertIn("новой цифры ставки", happened.casefold())
+        self.assertTrue(happened.startswith("Учебное событие"))
         link = str(carrier_rate["card"]["why"])
         self.assertIn("открыт лизинг", link)
         self.assertIn("плавающей ставки", link)
