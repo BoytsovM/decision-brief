@@ -6,7 +6,6 @@ const screens = {
   card: renderCard,
   profile: renderProfile,
   source: renderSource,
-  clarify: renderClarify,
 };
 
 const state = {
@@ -31,6 +30,8 @@ const state = {
   eventNote: "",
   analysis: null,
   analysisNote: "",
+  askOpen: false,
+  managerNote: "",
 };
 
 const topicFilters = [
@@ -65,6 +66,9 @@ function esc(value) {
 
 function go(screen) {
   state.screen = screen;
+  if (screen !== "card") {
+    state.askOpen = false;
+  }
   if (location.hash !== `#${screen}`) {
     history.pushState({ screen }, "", `#${screen}`);
   }
@@ -414,8 +418,6 @@ function renderCard() {
       </main>`;
   }
   const card = item.card;
-  const useful = (id, label) =>
-    `<button class="btn btn-secondary ${state.useful === id ? "is-on" : ""}" type="button" data-useful="${id}">${label}</button>`;
   const modelText = card.model
     ? card.model
     : "Модель на просмотр ленты не вызывается. Вывод появится только по отдельному запросу анализа.";
@@ -447,30 +449,87 @@ function renderCard() {
             <button class="btn" type="submit">Спросить</button>
           </form>
         </article>
-        <aside class="rail">
-          <div class="rail-actions">
-            <button class="btn" type="button" data-go="clarify" data-item="${esc(item.id)}">Обсудить с менеджером</button>
-            <button class="btn btn-secondary" type="button">Поделиться</button>
-          </div>
-          <section class="rail-card">
-            <h2 class="h3">Почему в ленте</h2>
-            <p class="body">${esc(item.why)}</p>
-          </section>
-          <section class="rail-card">
-            <h2 class="h3">Это было полезно?</h2>
-            <div class="choice-row">
-              ${useful("yes", "Полезно")}
-              ${useful("no", "Не про нас")}
-              ${useful("known", "Уже знал")}
-            </div>
-          </section>
-          <section class="legend">
-            <strong>Как читать карточку</strong>
-            <p>Блоки 01–04 собраны из новости, профиля и карточки банка. Блок 05 пуст, пока модель не запрошена отдельно.</p>
-          </section>
+        <aside class="rail ${state.askOpen ? "is-ask" : ""}">
+          ${state.askOpen ? clarifyPanel() : cardRail(item)}
         </aside>
       </div>
     </main>`;
+}
+
+function useful(id, label) {
+  const on = state.useful === id ? "is-on" : "";
+  return `<button class="btn btn-secondary ${on}" type="button" data-useful="${id}">${label}</button>`;
+}
+
+function cardRail(item) {
+  return `
+    <div class="rail-actions">
+      <button class="btn" type="button" data-manager="1">Обсудить с менеджером</button>
+      <button class="btn btn-secondary" type="button">Поделиться</button>
+    </div>
+    ${state.managerNote ? `<p class="caption">${esc(state.managerNote)}</p>` : ""}
+    <section class="rail-card">
+      <h2 class="h3">Почему в ленте</h2>
+      <p class="body">${esc(item.why)}</p>
+    </section>
+    <section class="rail-card">
+      <h2 class="h3">Это было полезно?</h2>
+      <div class="choice-row">
+        ${useful("yes", "Полезно")}
+        ${useful("no", "Не про нас")}
+        ${useful("known", "Уже знал")}
+      </div>
+    </section>
+    <section class="legend">
+      <strong>Как читать карточку</strong>
+      <p>Блоки 01–04 собраны из новости, профиля и карточки банка. Блок 05 пуст, пока модель не запрошена отдельно.</p>
+    </section>`;
+}
+
+function clarifyPanel() {
+  const item = selected();
+  const title = item ? item.title : "Событие не выбрано";
+  const result = state.analysis;
+  const pending = state.analysisNote
+    ? `<p class="caption">${esc(state.analysisNote)}</p>`
+    : "";
+  const asked = state.asked
+    ? `<button class="bubble" type="button">${esc(state.asked)}</button>`
+    : "";
+  const answer = result
+    ? `<div class="answer">
+         ${(result.claims || []).map((row) => `
+           <div class="stack" style="gap:4px">${origin(row.title === "риск" || row.title === "возможность" ? "ai" : "fact")}<p class="body"><strong>${esc(row.title)}</strong> ${esc(row.text)}</p></div>`).join("")}
+         ${(result.banks || []).map((row) => `<div class="stack" style="gap:4px">${origin("bank")}<p class="body">${esc(row.text)}</p></div>`).join("")}
+         <p class="caption">${esc(result.status === "model_verified" ? "Ответ модели проверен по источникам." : "Модель на этот запуск не подменяла правила.")}</p>
+       </div>`
+    : pending;
+  const suggestions = [
+    "Что это значит для лизинга?",
+    "Как это касается всей группы?",
+    "Сравнить с прошлым решением",
+  ];
+  return `
+    <section class="panel">
+      <div class="meta-row">
+        <h2 class="h3">Уточнить по событию</h2>
+        <div class="spacer"></div>
+        <button class="text-btn" type="button" data-close-ask="1">Закрыть</button>
+      </div>
+      <p class="caption">${esc(title)}</p>
+      ${asked}
+      ${answer}
+      <div class="suggests">
+        ${suggestions.map((line) => `<button class="suggest" type="button" data-prefill="${esc(line)}">${esc(line)}</button>`).join("")}
+      </div>
+      <form class="panel-input" data-ask="1">
+        <input name="q" type="text" placeholder="Ваш вопрос" value="${esc(state.asked)}">
+        <button class="btn" type="submit">Спросить</button>
+      </form>
+      <div class="note">
+        <p>Вопрос остаётся на этом событии. Ответ не выходит за факт, последствие по профилю и позицию банка. Если данных нет, так и написано.</p>
+      </div>
+    </section>`;
 }
 
 function choice(group, id) {
@@ -561,44 +620,6 @@ function renderSource() {
     </main>`;
 }
 
-function renderClarify() {
-  const item = selected();
-  const title = item ? item.title : "Событие не выбрано";
-  const result = state.analysis;
-  const asked = result
-    ? `<button class="bubble" type="button">${esc(result.question || state.asked)}</button>
-       <div class="answer">
-         ${(result.claims || []).map((row) => `
-           <div class="stack" style="gap:4px">${origin(row.title === "риск" || row.title === "возможность" ? "ai" : "fact")}<p class="body"><strong>${esc(row.title)}</strong> ${esc(row.text)}</p></div>`).join("")}
-         ${(result.banks || []).map((row) => `<div class="stack" style="gap:4px">${origin("bank")}<p class="body">${esc(row.text)}</p></div>`).join("")}
-         <p class="caption">${esc(result.status === "model_verified" ? "Ответ модели проверен по источникам." : "Модель на этот запуск не подменяла правила.")}</p>
-       </div>`
-    : "";
-  const suggestions = [
-    "Что означает изменение спроса?",
-    "Как события влияют на стоимость финансирования?",
-    "Где первоисточник?",
-  ];
-  return `
-    <main class="panel-page">
-      <section class="panel">
-        <h1 class="h2">Уточнить по событию</h1>
-        <p class="caption">${esc(title)}</p>
-        ${asked}
-        <div class="suggests">
-          ${suggestions.map((line) => `<button class="suggest" type="button" data-prefill="${esc(line)}">${esc(line)}</button>`).join("")}
-        </div>
-        <form class="panel-input" data-ask="1">
-          <input name="q" type="text" placeholder="Ваш вопрос" value="${esc(state.asked)}">
-          <button class="btn" type="submit">Спросить</button>
-        </form>
-        <div class="note">
-          <p>Вопрос остаётся на этом событии. Ответ не выходит за факт, последствие по профилю и позицию банка. Если данных нет, так и написано в карточке.</p>
-        </div>
-      </section>
-    </main>`;
-}
-
 function paint() {
   const root = document.getElementById("app");
   const draw = screens[state.screen] || renderHome;
@@ -610,6 +631,7 @@ function paint() {
         state.itemId = itemId;
       }
       const next = node.getAttribute("data-go");
+      state.askOpen = false;
       if (screens[next]) {
         go(next);
       }
@@ -722,13 +744,31 @@ function paint() {
       paint();
     });
   }
-  const form = root.querySelector("[data-ask]");
-  if (form) {
+  root.querySelectorAll("[data-ask]").forEach((form) => {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       const field = form.querySelector("[name=q]");
-      state.asked = field.value.trim();
-      runAnalysis(state.asked);
+      const question = field.value.trim();
+      if (!question) {
+        return;
+      }
+      state.asked = question;
+      state.askOpen = true;
+      runAnalysis(question);
+    });
+  });
+  const closeAsk = root.querySelector("[data-close-ask]");
+  if (closeAsk) {
+    closeAsk.addEventListener("click", () => {
+      state.askOpen = false;
+      paint();
+    });
+  }
+  const manager = root.querySelector("[data-manager]");
+  if (manager) {
+    manager.addEventListener("click", () => {
+      state.managerNote = "Обращение к менеджеру отмечено. Карточка остаётся открытой.";
+      paint();
     });
   }
 }
@@ -789,10 +829,6 @@ async function runAnalysis(question) {
     }
     state.analysis = payload;
     state.analysisNote = "";
-    if (state.screen !== "feed") {
-      go("clarify");
-      return;
-    }
   } catch (error) {
     state.analysisNote = error instanceof Error ? error.message : "Анализ не собрался";
   }
@@ -852,12 +888,20 @@ async function loadFeed(refresh) {
 }
 
 window.addEventListener("popstate", () => {
-  const name = (location.hash || "#home").slice(1);
-  state.screen = screens[name] ? name : "home";
+  applyRoute();
   paint();
 });
 
-const initial = (location.hash || "#home").slice(1);
-state.screen = screens[initial] ? initial : "home";
+function applyRoute() {
+  const name = (location.hash || "#home").slice(1);
+  if (name === "clarify") {
+    state.screen = "card";
+    state.askOpen = true;
+    return;
+  }
+  state.screen = screens[name] ? name : "home";
+}
+
+applyRoute();
 paint();
 loadFeed(false);

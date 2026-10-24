@@ -745,6 +745,14 @@ select.company {
   flex: none;
 }
 
+.rail.is-ask {
+  width: 480px;
+}
+
+.rail.is-ask .panel {
+  width: 100%;
+}
+
 .rail-actions,
 .choice-row {
   display: flex;
