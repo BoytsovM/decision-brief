@@ -554,6 +554,10 @@ select.company {
   color: var(--text-secondary);
 }
 
+.card-main > .back {
+  align-self: flex-start;
+}
+
 .card-main {
   display: flex;
   flex-direction: column;
