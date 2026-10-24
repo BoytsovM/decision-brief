@@ -34,6 +34,8 @@ const state = {
   managerNote: "",
   openMenu: "",
   period: "week",
+  level: "",
+  topic: "",
 };
 
 const periods = [
@@ -42,9 +44,19 @@ const periods = [
   ["month", "Месяц"],
 ];
 
+const modes = [
+  ["demo", "Демонстрационные события"],
+  ["live", "Публичные RSS"],
+];
+
+const levels = [
+  ["all", "Все"],
+  ["high", "Важно"],
+  ["mid", "К сведению"],
+];
+
 const topicFilters = [
   ["all", "Все"],
-  ["important", "Важно"],
   ["rate", "Ставка и долг"],
   ["fx", "Курс"],
   ["fuel", "Издержки"],
@@ -76,6 +88,24 @@ function chooseMenu(name, value) {
   if (name === "period") {
     state.period = value;
     paint();
+    return;
+  }
+  if (name === "level") {
+    state.level = value === "all" ? "" : value;
+    paint();
+    return;
+  }
+  if (name === "topic") {
+    state.topic = value === "all" ? "" : value;
+    paint();
+    return;
+  }
+  if (name === "mode") {
+    if (state.mode === value) {
+      paint();
+      return;
+    }
+    setMode(value);
     return;
   }
   state.itemId = "";
@@ -162,14 +192,14 @@ function visibleFeed() {
     if (hidden.some((id) => ids.includes(id))) {
       return false;
     }
-    if (!state.filter || state.filter === "all") {
-      return true;
+    if (state.level && item.level !== state.level) {
+      return false;
     }
-    if (state.filter === "important") {
-      return item.level === "high";
+    if (state.topic) {
+      const wanted = topicFactors[state.topic] || [];
+      return ids.some((id) => wanted.includes(id));
     }
-    const wanted = topicFactors[state.filter] || [];
-    return ids.some((id) => wanted.includes(id));
+    return true;
   });
 }
 
@@ -210,6 +240,19 @@ function periodMenu() {
   const current = periods.find((row) => row[0] === state.period) || periods[1];
   const options = periods.map(([id, label]) => ({ id, label }));
   return dropdown("period", "chip", current[1], options, state.period);
+}
+
+function modeMenu() {
+  const current = modes.find((row) => row[0] === state.mode) || modes[0];
+  const options = modes.map(([id, label]) => ({ id, label }));
+  return dropdown("mode", "chip is-on", current[1], options, state.mode);
+}
+
+function namedMenu(name, title, rows, value) {
+  const current = rows.find((row) => row[0] === (value || "all")) || rows[0];
+  const options = rows.map(([id, label]) => ({ id, label }));
+  const selected = value ? "chip is-on" : "chip";
+  return dropdown(name, selected, `${title}: ${current[1]}`, options, value || "all");
 }
 
 function header(active) {
@@ -383,9 +426,6 @@ function renderFeed() {
         <div class="factors">${(item.factors || []).map((factor) => `<span class="factor">${esc(factor.label)}</span>`).join("")}</div>
       </button>`).join("")
     : `<p class="body">${esc(state.error || (state.loading ? "Считаем ленту." : "Нет новостей выше порога."))}</p>`;
-  const chips = topicFilters.map(([id, label]) =>
-    `<button class="chip ${state.filter === id ? "is-on" : ""}" type="button" data-filter="${id}">${label}</button>`,
-  ).join("");
   const incoming = state.feed ? state.feed.incoming : 0;
   const ranked = state.feed ? state.feed.ranked : 0;
   const updated = state.feed ? state.feed.loaded_at : "";
@@ -402,11 +442,11 @@ function renderFeed() {
           <p class="body muted">Мы отобрали события, которые влияют на вашу компанию, и объяснили почему. Обновлено ${esc(updated)}. <button class="text-btn" type="button" data-refresh="1">Обновить</button></p>
           ${notice()}
           <div class="filters">
-            <button class="chip ${state.mode === "demo" ? "is-on" : ""}" type="button" data-mode="demo">Демонстрационные события</button>
-            <button class="chip ${state.mode === "live" ? "is-on" : ""}" type="button" data-mode="live">Публичные RSS</button>
+            ${modeMenu()}
             ${roleMenu()}
             ${periodMenu()}
-            ${chips}
+            ${namedMenu("level", "Важность", levels, state.level)}
+            ${namedMenu("topic", "Тема", topicFilters, state.topic)}
           </div>
           <div class="feed-list">${cards}</div>
           <p class="caption">Показаны ${rows.length} из ${incoming} событий. Выше порога: ${ranked}. Остальные скрыты для этой компании и роли.</p>
