@@ -119,6 +119,7 @@ def _row_to_profile(row: dict[str, str]) -> CompanyProfile:
             "CL_PRODUCT_LEA_MARK", "CL_PRODUCT_DEP_MARK", "FTS_FLAG",
             "AMOUNT_WORKERS_FNS_GRADATION",
         ) if not (row.get(name) or "").strip()),
+        region=(row.get("REGION") or "").strip(),
     )
 
 

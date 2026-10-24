@@ -49,6 +49,7 @@ class CompanyProfile:
     staff_over_100: bool = False
     rapid_growth: bool = False
     missing_fields: tuple[str, ...] = ()
+    region: str = ""
 
 
 @dataclass(frozen=True)

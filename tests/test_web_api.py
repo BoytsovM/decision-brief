@@ -41,8 +41,11 @@ class FeedPayloadTest(unittest.TestCase):
         self.assertGreaterEqual(len(shown), 1)
         row = shown[0]
         self.assertEqual(row["title"], items[0].title)
+        self.assertNotEqual(row["headline"], row["title"])
+        self.assertIn("?", str(row["headline"]))
         self.assertIn("ставк", str(row["summary"]).casefold())
         self.assertNotIn("Топливо дорожает", str(row["title"]))
+        self.assertNotIn("Топливо дорожает", str(row["headline"]))
         self.assertIn(",", str(row["score"]))
         card = row["card"]
         assert isinstance(card, dict)
@@ -56,14 +59,18 @@ class FeedPayloadTest(unittest.TestCase):
         risk_text = " ".join(str(row["text"]) for row in effects["risks"])
         next_text = " ".join(str(row["text"]) for row in effects["next"])
         self.assertIn("лизинг", risk_text.casefold())
-        self.assertIn("паузу", next_text.casefold())
+        self.assertIn("паузу", str(card["bank"]).casefold())
+        self.assertIn("Материал банка", str(card["bank"]))
+        self.assertNotIn("паузу", next_text.casefold())
+        self.assertIn("прогноз банка", next_text.casefold())
+        self.assertNotIn("ОКВЭД", str(card["why"]))
         self.assertNotIn("парк на бензине", risk_text.casefold())
         self.assertIn("Банк России", str(row["source_name"]))
 
     def test_plain_text_strips_markup(self) -> None:
         self.assertEqual(plain_text("<b>Ставка</b>  <!--x-->  14"), "Ставка 14")
 
-    def test_demo_rate_story_stays_off_the_horeca_feed(self) -> None:
+    def test_parsed_story_stays_visible_when_it_misses_the_horeca_threshold(self) -> None:
         items = demo_news()
         companies = load_demo_companies(sample_companies_path())
         carrier = next(row for row in companies if row.synthetic_u == "U_sample_transport")
@@ -83,7 +90,12 @@ class FeedPayloadTest(unittest.TestCase):
         rate = "Демо: ключевая ставка сохранена"
         demand = "Демо: спрос в общепите замедляется"
         self.assertIn(rate, _titles(carrier_feed))
-        self.assertNotIn(rate, _titles(cafe_feed))
+        self.assertIn(rate, _titles(cafe_feed))
+        cafe_rows = cafe_feed["items"]
+        assert isinstance(cafe_rows, list)
+        rate_row = next(row for row in cafe_rows if row["title"] == rate)
+        self.assertEqual(rate_row["level"], "low")
+        self.assertEqual(len(cafe_rows), cafe_feed["incoming"])
         self.assertIn(demand, _titles(owner_feed))
 
     def test_failed_rss_keeps_the_previous_live_feed(self) -> None:

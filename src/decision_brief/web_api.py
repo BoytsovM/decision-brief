@@ -1,4 +1,4 @@
-"""JSON for the Figma frontend. Ranking stays in ``rank_feed``.
+"""JSON for the Figma frontend. Scoring stays in ``parsed_feed``.
 
 The browser does not parse RSS. This module only projects companies,
 roles, and already scored items into the fields the screen draws.
@@ -8,6 +8,7 @@ The model client is never called here.
 from __future__ import annotations
 
 import csv
+import hashlib
 import html
 import re
 from collections.abc import Sequence
@@ -22,7 +23,7 @@ from decision_brief.screen import (
     card_view,
     company_labels,
     csv_fields_raising_score,
-    rank_feed,
+    parsed_feed,
 )
 
 _INDUSTRY_RU: dict[str, str] = {
@@ -74,7 +75,6 @@ _MONTHS: tuple[str, ...] = (
 
 _MARKUP = re.compile(r"(?is)<!--.*?-->|<[^>]+>")
 _SPACE = re.compile(r"\s+")
-_FEED_LIMIT = 20
 
 
 def plain_text(value: str) -> str:
@@ -145,14 +145,16 @@ def build_feed(
     loaded_at: str,
     payments: Sequence[dict[str, str]] = (),
 ) -> dict[str, object]:
-    """One company feed after ``rank_feed``. The model block stays empty.
+    """One company feed after every parsed item is scored.
 
-    ``source`` is ``live`` or ``demo``. ``incoming`` counts items before
-    the relevance threshold. At most twenty ranked rows are returned.
+    ``source`` is ``live`` or ``demo``. ``incoming`` counts parsed items.
+    ``ranked`` counts those at or above the show threshold. The items
+    list keeps the rest as well, so the screen can scroll the whole parse.
+    The model block stays empty.
     """
-    ranked = rank_feed(company, list(items), role, as_of=as_of)
-    shown = ranked[:_FEED_LIMIT]
-    projected = [_item_payload(company, row, role, shown) for row in shown]
+    scored = parsed_feed(company, list(items), role, as_of=as_of)
+    projected = [_item_payload(company, row, role, scored) for row in scored]
+    ranked = [row for row in scored if row.relevance is not Relevance.HIDDEN]
     return {
         "company": _company_payload(company, payments),
         "role": {"id": role.value, "label": ROLE_LABEL_RU[role]},
@@ -164,6 +166,99 @@ def build_feed(
         "ranked": len(ranked),
         "items": projected,
     }
+
+
+def event_headline(company: CompanyProfile, item: NewsItem) -> str:
+    """Business title for the feed. It is not the news headline.
+
+    A short stake plus a mild question. The variant follows the URL,
+    so neighboring cards about one factor do not repeat one sentence.
+    """
+    factor = _lead_factor(item)
+    if factor is None:
+        return "Событие почти не задевает профиль. Стоит ли его открыть?"
+    options = _headline_options(company, factor)
+    digest = hashlib.sha256(item.source_url.encode("utf-8")).digest()
+    return options[digest[0] % len(options)]
+
+
+def _lead_factor(item: NewsItem) -> Factor | None:
+    best: Factor | None = None
+    best_level = 0
+    for factor in Factor:
+        level = item.factors.get(factor, 0)
+        if level > best_level:
+            best = factor
+            best_level = level
+    return best
+
+
+def _headline_options(company: CompanyProfile, factor: Factor) -> tuple[str, ...]:
+    if factor is Factor.RATE:
+        if company.has_loan and company.has_leasing:
+            subject, graph = "кредиту и лизингу", "кредита и лизинга"
+        elif company.has_leasing:
+            subject, graph = "лизингу", "лизинга"
+        elif company.has_loan:
+            subject, graph = "кредиту", "кредита"
+        else:
+            subject, graph = "заёмным деньгам", "заёмных денег"
+        return (
+            f"Ставка осталась высокой. Что проверить по {subject}?",
+            f"Снижение в прогнозе банка не ближайшее. Какой график у {graph}?",
+            f"До конца года деньги остаются дорогими. Что сверить по {subject}?",
+        )
+    if factor is Factor.FX:
+        if company.has_foreign_trade:
+            return (
+                "Курс переписывает расчёты. Хватит ли запаса по контрактам?",
+                "Валюта двигает себестоимость. Что зафиксировать в контрактах?",
+                "Курс уже в цене контрактов. Проверить условия до следующей выплаты?",
+            )
+        return (
+            "Курс переписывает расчёты. Хватит ли запаса по валюте?",
+            "Валюта двигает себестоимость. Что зафиксировать в расчётах?",
+            "Курс уже в цене. Проверить валютные платежи?",
+        )
+    if factor is Factor.INFLATION:
+        return (
+            "Цены растут быстрее плана. Выдержит ли маржа закупок?",
+            "Инфляция догоняет прайс. Успеете пересмотреть закупочные цены?",
+        )
+    if factor is Factor.DEMAND:
+        return (
+            "Спрос меняет выручку. Что будет с продажами?",
+            "Покупатели замедляются. Хватит ли выручки на ближайший квартал?",
+        )
+    if factor is Factor.LABOR:
+        if company.has_payroll or company.staff_over_100:
+            return (
+                "Кадры дорожают. Как вырастет фонд оплаты труда?",
+                "Рынок труда давит на штат. Что заложить в фонд оплаты труда?",
+            )
+        return (
+            "Кадры дорожают. Как вырастут расходы на персонал?",
+            "Рынок труда давит на штат. Что заложить в расходы на людей?",
+        )
+    if factor is Factor.FUEL:
+        return (
+            "Топливо двигает себестоимость рейса. Какая доля топлива в расходах?",
+            "Цена топлива расходится по видам. На чём работает ваш парк?",
+        )
+    if factor is Factor.BUDGET:
+        return (
+            "Бюджетные условия меняются. Затронет ли это контракты?",
+            "Государственные деньги пересматривают. Что проверить в контрактах?",
+        )
+    if factor is Factor.DEBT:
+        return (
+            "Долговая нагрузка остаётся темой. Какой график у долга?",
+            "Обслуживание долга не дешевеет. Есть ли запас по платежам?",
+        )
+    return (
+        "Сырьё меняет закупочную цену. Какая доля сырья в себестоимости?",
+        "Биржевая цена дошла до контракта. Можно ли переложить сырьё в тариф?",
+    )
 
 
 def _item_payload(
@@ -179,12 +274,17 @@ def _item_payload(
         for factor in Factor
         if item.factors.get(factor, 0) > 0
     ]
-    level = "high" if scored.relevance is Relevance.IMPORTANT else "mid"
-    label = "Важно" if level == "high" else "К сведению"
+    if scored.relevance is Relevance.IMPORTANT:
+        level, label = "high", "Важно"
+    elif scored.relevance is Relevance.NOTICE:
+        level, label = "mid", "К сведению"
+    else:
+        level, label = "low", "Ниже порога"
     why = view.consequences
     return {
         "id": item.source_url,
         "title": plain_text(item.title),
+        "headline": event_headline(company, item),
         "summary": plain_text(item.summary),
         "published": _russian_date(item.published_on),
         "published_iso": item.published_on.isoformat(),
@@ -196,8 +296,8 @@ def _item_payload(
         "factors": factors,
         "why": why,
         "card": {
-            "happened": view.happened,
-            "why": _company_link(company),
+            "happened": _reader_fact(plain_text(item.summary) or view.happened),
+            "why": _event_link(company, item),
             "consequences": view.consequences,
             "effects": _effects(company, scored),
             "bank": _bank_for_reader(scored),
@@ -232,6 +332,7 @@ def _company_payload(
             {"label": "Продукты в Альфе", "value": products},
             {"label": "ВЭД", "value": trade},
         ],
+        "region": company.region,
         "deposit": "Есть в Альфе" if company.has_deposit else "Не отмечены",
         "loan": "Есть в Альфе" if company.has_loan else "Не отмечены",
         "payments": list(payments),
@@ -316,8 +417,9 @@ def _effects(company: CompanyProfile, scored: ScoredItem) -> dict[str, object]:
     """Three consequence columns from rules and bank forecasts.
 
     A sentence about revenue or deposit income is an opportunity.
-    Every other profile sentence stays a risk. A bank sentence about
-    a later date goes to the next column. Missing profile facts are
+    Every other profile sentence stays a risk. The next column is left
+    for the model: bank forecasts stay in the bank block, so the same
+    numbers are not copied into a third place. Missing profile facts are
     named in Russian, without column codes.
     """
     risks: list[dict[str, str]] = []
@@ -329,17 +431,34 @@ def _effects(company: CompanyProfile, scored: ScoredItem) -> dict[str, object]:
             chances.append(kind_row)
         else:
             risks.append(kind_row)
-    upcoming = [
-        {"kind": "bank", "text": text}
-        for text in _thesis_texts(scored)
-        if any(mark in text.casefold() for mark in _FUTURE_MARKS)
-    ]
     return {
         "risks": risks,
         "opportunities": chances,
-        "next": upcoming,
+        "next": _horizon_rows(scored),
         "gaps": _gap_line(company),
     }
+
+
+def rate_horizon_present(scored: ScoredItem) -> bool:
+    """True when the bank path already fills the next column."""
+    return bool(_horizon_rows(scored))
+
+
+def _horizon_rows(scored: ScoredItem) -> list[dict[str, str]]:
+    """The forecast still ahead. Not a task and not a second bank block."""
+    for text in _thesis_texts(scored):
+        found = re.search(
+            r"(\d[\d,]*% на конец \d{4}) и (\d[\d,]*% на конец \d{4})",
+            text,
+        )
+        if found is None:
+            continue
+        sentence = (
+            "Дальше платежи держит прогноз банка: "
+            f"{found.group(1)} и только {found.group(2)}."
+        )
+        return [{"kind": "fact", "text": sentence}]
+    return []
 
 
 def _sentences(text: str) -> list[str]:
@@ -391,6 +510,39 @@ _SIGN_RU: dict[str, str] = {
 }
 
 
+def _reader_fact(text: str) -> str:
+    """One sentence with the event's number, not the article lead."""
+    sentences = _sentences(text)
+    for sentence in sentences:
+        folded = sentence.casefold()
+        has_number = any(char.isdigit() for char in sentence)
+        if has_number and ("ставк" in folded or "%" in sentence or "руб" in folded):
+            return sentence
+    for sentence in sentences:
+        if len(sentence) >= 40:
+            return sentence
+    return sentences[0] if sentences else text
+
+
+def _event_link(company: CompanyProfile, item: NewsItem) -> str:
+    """How this event touches the open products. Not a company passport."""
+    parts: list[str] = []
+    if item.factors.get(Factor.RATE, 0) > 0 and (company.has_loan or company.has_leasing):
+        names: list[str] = []
+        if company.has_loan:
+            names.append("кредиту")
+        if company.has_leasing:
+            names.append("лизингу")
+        joined = " и ".join(names)
+        parts.append(f"Ставка бьёт по уже открытым {joined}.")
+    if item.factors.get(Factor.FX, 0) > 0 and company.has_foreign_trade:
+        where = company.foreign_trade_countries or "внешние контракты"
+        parts.append(f"Торговля: {where}. Валюта закупок отсюда не видна.")
+    if not parts:
+        return _company_link(company)
+    return " ".join(parts)
+
+
 def _company_link(company: CompanyProfile) -> str:
     """Profile facts that tie the company to the event, without scores."""
     industry = _INDUSTRY_RU.get(company.industry, company.industry)
@@ -431,11 +583,18 @@ def _bank_for_reader(scored: ScoredItem) -> str:
             rest = [row for row in rows if row.factor is not top]
             rows = matched + rest
     published = card.published_on.strftime("%d.%m.%Y")
-    sentences = [row.text.strip() for row in rows if row.text.strip()]
-    head = f"{card.title}. {published}."
+    sentences = [_dated_thesis(row.text.strip(), scored) for row in rows if row.text.strip()]
+    head = f"{card.title}. Материал банка от {published}."
     if not sentences:
         return head
     return head + " " + " ".join(sentences)
+
+
+def _dated_thesis(text: str, scored: ScoredItem) -> str:
+    """A forecast of 23 October is past once the news is on or after that day."""
+    if scored.item.published_on >= date(2026, 10, 23):
+        return text.replace("ожидает паузу 23 октября", "тогда ожидал паузу 23 октября")
+    return text
 
 
 def _leading_factor(item: NewsItem) -> Factor | None:

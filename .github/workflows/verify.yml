@@ -20,6 +20,7 @@ jobs:
       - run: docker compose config --quiet
       - run: docker compose up --build --wait --wait-timeout 120
       - run: curl --fail http://127.0.0.1:8501/_stcore/health
+      - run: curl --fail http://127.0.0.1:8780/
       - run: docker compose run --rm --no-deps screen python -m unittest discover -s tests
       - if: always()
         run: docker compose logs --no-color && docker compose down

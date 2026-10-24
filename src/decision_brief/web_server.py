@@ -1,9 +1,12 @@
 """Serve the Figma screens and the jury checks on one origin.
 
 ``demo`` is the default: synthetic companies, the fixed scenario date
-and the sample news file. ``live`` reads public RSS. A failed refresh
-keeps the previous live feed and says so. The model runs only for
-``/api/analysis``.
+and the sample news file. ``live`` re-reads public RSS on a short
+cadence. A failed refresh keeps the previous live feed and says so.
+The feed list and an opened card do not call a model. The card
+shows the stored conclusion. ``/api/card-model`` is kept for a later
+pass and is not used by the screens. ``/api/analysis`` still answers
+a follow-up question.
 """
 
 from __future__ import annotations
@@ -11,7 +14,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import threading
+import time
 from collections.abc import Sequence
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -20,7 +25,15 @@ from urllib.parse import parse_qs, unquote, urlparse, urlsplit
 
 from decision_brief.agent import prepare_analysis
 from decision_brief.classify import factors_in_text
-from decision_brief.conclusion import client_from_env
+from decision_brief.web_api import rate_horizon_present
+from decision_brief.conclusion import (
+    ModelCallError,
+    _CALL_FAILED,
+    _UNPARSED,
+    build_model_prompt,
+    client_from_env,
+    reader_model_parts,
+)
 from decision_brief.demo import DEMO_DATE, SAMPLE_DIR, demo_news
 from decision_brief.feeds import dedupe_by_link, parse_rss
 from decision_brief.models import CompanyProfile, NewsItem
@@ -29,6 +42,7 @@ from decision_brief.screen import (
     NewsLoad,
     load_demo_companies,
     load_news,
+    parsed_feed,
     resolve_companies_path,
     retain_feed,
     rss_failure_message,
@@ -54,6 +68,10 @@ _LIVE_ITEMS: list[NewsItem] | None = None
 _LIVE_NOTICE = ""
 _LIVE_AT = ""
 _EXTRAS: dict[str, list[NewsItem]] = {"demo": [], "live": []}
+_MODEL_CACHE: dict[tuple[str, str, str, str], str] = {}
+_LIVE_REFRESH_SECONDS = 10
+_REFRESH_GUARD = threading.Lock()
+_LIVE_THREAD: threading.Thread | None = None
 
 _TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -67,9 +85,58 @@ _TYPES = {
 def main() -> None:
     """Bind the frontend. One process serves both the pages and the API."""
     _load_local_env()
-    server = ThreadingHTTPServer(("127.0.0.1", _PORT), Handler)
-    print(f"Frontend http://127.0.0.1:{_PORT}/", flush=True)
+    _start_live_refresh()
+    host, port = _listen()
+    server = ThreadingHTTPServer((host, port), Handler)
+    print(f"Frontend http://127.0.0.1:{port}/", flush=True)
     server.serve_forever()
+
+
+def _listen() -> tuple[str, int]:
+    """Address for this process. Local runs stay on localhost."""
+    host = os.environ.get("DECISION_BRIEF_BIND", "127.0.0.1").strip()
+    if host not in {"127.0.0.1", "0.0.0.0"}:
+        host = "127.0.0.1"
+    raw_port = os.environ.get("DECISION_BRIEF_WEB_PORT", str(_PORT)).strip()
+    try:
+        port = int(raw_port)
+    except ValueError:
+        port = _PORT
+    if port < 1 or port > 65535:
+        port = _PORT
+    return host, port
+
+
+def _start_live_refresh() -> None:
+    """Re-read public RSS while this process is running.
+
+    The first pass waits one interval so a page load can fetch on its
+    own. The loop does not overlap its own previous pass. A failed load
+    stays in ``_live_items`` and does not replace the previous feed.
+    """
+    global _LIVE_THREAD
+    if _LIVE_THREAD is not None and _LIVE_THREAD.is_alive():
+        return
+    _LIVE_THREAD = threading.Thread(
+        target=_refresh_live_cache,
+        name="live-rss",
+        daemon=True,
+    )
+    _LIVE_THREAD.start()
+
+
+def _refresh_live_cache() -> None:
+    """Keep the live snapshot current. This loop does not stop the server."""
+    while True:
+        time.sleep(_LIVE_REFRESH_SECONDS)
+        if not _REFRESH_GUARD.acquire(blocking=False):
+            continue
+        try:
+            _live_items(True)
+        except Exception as exc:
+            print(f"Live RSS refresh failed: {exc.__class__.__name__}", flush=True)
+        finally:
+            _REFRESH_GUARD.release()
 
 
 def combine_live(
@@ -143,6 +210,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/feed":
             status, payload = _feed(query)
+            self._json(status, payload)
+            return
+        if parsed.path == "/api/card-model":
+            status, payload = _card_model(query)
             self._json(status, payload)
             return
         self._file(parsed.path)
@@ -262,6 +333,110 @@ def _add_event(payload: dict[str, object]) -> tuple[int, dict[str, object]]:
     return 200, {"added": len(created)}
 
 
+def _card_model(query: dict[str, list[str]]) -> tuple[int, dict[str, object]]:
+    """One model block for the card the user opened. The list is not scored here."""
+    mode = _mode(query)
+    company, role, error = _selection(mode, query)
+    if error is not None:
+        return error
+    item_id = _first(query, "item")
+    if not item_id:
+        return 400, {"error": "Нужна карточка события."}
+    cache_key = (mode, company.synthetic_u, role.value, item_id)
+    with _LOCK:
+        cached = _MODEL_CACHE.get(cache_key, "")
+    if cached:
+        return 200, _cached_model(cached)
+    try:
+        items, _notice, _loaded = _items(mode, refresh=False)
+    except OSError:
+        return 502, {"error": "Лента не прочиталась."}
+    scored = parsed_feed(company, items, role, as_of=_scenario_date(mode))
+    match = next((row for row in scored if row.item.source_url == item_id), None)
+    if match is None:
+        return 404, {"error": "Событие не найдено в ленте."}
+    client = client_from_env()
+    if client is None:
+        return 200, {
+            "model": "",
+            "status": "unavailable",
+            "error": "Шлюз не настроен: нет модели, адреса или ключа.",
+        }
+    prompt = build_model_prompt(company, match, role=role)
+    try:
+        parts = reader_model_parts(client.complete(prompt), prompt)
+        parts["summary"] = _settle_shown_text(str(parts.get("summary", "")), match)
+        parts["headline"] = _settle_shown_text(str(parts.get("headline", "")), match)
+        if rate_horizon_present(match):
+            parts["next"] = ""
+    except ModelCallError:
+        return 200, {"model": "", "status": "failed", "error": "Вызов модели не выполнен."}
+    packed = json.dumps(parts, ensure_ascii=False)
+    if parts["summary"] not in {"", _UNPARSED, _CALL_FAILED}:
+        with _LOCK:
+            _MODEL_CACHE[cache_key] = packed
+    return 200, _model_body(parts, "ready")
+
+
+_STALE_PAUSE = re.compile(
+    r"Банк ожидает паузу[^.]*?23 октября",
+    re.IGNORECASE,
+)
+_BANK_ECHO = re.compile(r"7,5.*87,2|87,2.*7,5")
+
+
+def _settle_shown_text(text: str, scored: object) -> str:
+    """A passed decision is not still expected, and bank figures stay in block 04."""
+    item = getattr(scored, "item", None)
+    published = getattr(item, "published_on", None)
+    if not text or published is None or published < date(2026, 10, 23):
+        return text
+    settled = _STALE_PAUSE.sub("Пауза 23 октября уже состоялась", text)
+    settled = settled.replace("уже состоялась и ", "уже состоялась, а ")
+    kept: list[str] = []
+    for sentence in re.split(r"(?<=\.)\s+", settled.strip()):
+        if _BANK_ECHO.search(sentence) and not re.search(
+            r"кредит|лизинг|закуп|бизнес",
+            sentence,
+            re.IGNORECASE,
+        ):
+            continue
+        if sentence:
+            kept.append(sentence if sentence.endswith(".") else f"{sentence}.")
+    return " ".join(kept)
+
+
+def _cached_model(cached: str) -> dict[str, object]:
+    """Restore a stored card. Older cache rows are a single paragraph."""
+    try:
+        payload = json.loads(cached)
+    except json.JSONDecodeError:
+        payload = {"summary": cached}
+    if not isinstance(payload, dict):
+        payload = {"summary": cached}
+    return _model_body(payload, "cached")
+
+
+def _model_body(parts: dict[str, object], status: str) -> dict[str, object]:
+    """Summary for block 05 and short lines for the consequence columns."""
+    def text(key: str) -> str:
+        value = parts.get(key, "")
+        return value.strip() if isinstance(value, str) else ""
+
+    return {
+        "model": text("summary"),
+        "headline": text("headline"),
+        "question": text("question"),
+        "effects": {
+            "risk": text("risk"),
+            "opportunity": text("opportunity"),
+            "next": text("next"),
+            "gaps": text("gaps"),
+        },
+        "status": status,
+    }
+
+
 def _analysis(payload: dict[str, object]) -> tuple[int, dict[str, object]]:
     mode = _mode_value(payload.get("mode"))
     query = {
@@ -332,7 +507,7 @@ def _live_items(refresh: bool) -> tuple[list[NewsItem], str, str]:
             return previous, _LIVE_NOTICE, _LIVE_AT
     loaded = load_news()
     items, notice = combine_live(previous, loaded)
-    loaded_at = datetime.now().strftime("%d.%m.%Y, %H:%M")
+    loaded_at = datetime.now().strftime("%d.%m.%Y, %H:%M:%S")
     with _LOCK:
         _LIVE_ITEMS = items
         _LIVE_NOTICE = notice

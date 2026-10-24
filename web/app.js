@@ -8,6 +8,13 @@ const screens = {
   source: renderSource,
 };
 
+function initialMode() {
+  const requested = new URLSearchParams(window.location.search).get("mode");
+  return requested === "live" ? "live" : "demo";
+}
+
+const MODEL_LATER = "Модель на просмотр ленты не вызывается. Вывод появится только по отдельному запросу анализа.";
+
 const state = {
   screen: "home",
   filter: "",
@@ -26,27 +33,31 @@ const state = {
   feed: null,
   error: "",
   loading: true,
-  mode: "demo",
-  eventNote: "",
+  mode: initialMode(),
   analysis: null,
   analysisNote: "",
+  cardModels: {},
+  cardEffects: {},
+  cardTitles: {},
+  cardModelPending: "",
+  replyQuestion: "",
   askOpen: false,
   managerNote: "",
   openMenu: "",
-  period: "week",
+  period: "all",
   level: "",
   topic: "",
 };
 
+const FEED_POLL_MS = 3000;
+let feedEpoch = 0;
+let quietInFlight = false;
+
 const periods = [
+  ["all", "Все"],
   ["today", "Сегодня"],
   ["week", "Неделя"],
   ["month", "Месяц"],
-];
-
-const modes = [
-  ["demo", "Демонстрационные события"],
-  ["live", "Публичные RSS"],
 ];
 
 const levels = [
@@ -100,14 +111,6 @@ function chooseMenu(name, value) {
     paint();
     return;
   }
-  if (name === "mode") {
-    if (state.mode === value) {
-      paint();
-      return;
-    }
-    setMode(value);
-    return;
-  }
   state.itemId = "";
   state.analysis = null;
   state.analysisNote = "";
@@ -133,12 +136,12 @@ function go(screen) {
 }
 
 function dot(level) {
-  const file = level === "mid" ? "dot-notice.svg" : "dot-important.svg";
+  const file = level === "high" ? "dot-important.svg" : "dot-notice.svg";
   return `<img class="dot" src="assets/${file}" width="8" height="8" alt="">`;
 }
 
 function importance(level, label) {
-  const tone = level === "mid" ? "importance-mid" : "importance-high";
+  const tone = level === "high" ? "importance-high" : "importance-mid";
   return `<span class="importance ${tone}">${dot(level)}${esc(label)}</span>`;
 }
 
@@ -179,10 +182,13 @@ function inPeriod(item) {
   if (state.period === "today") {
     return published === asOf;
   }
+  if (state.period === "week") {
+    return published >= shiftIso(asOf, -7);
+  }
   if (state.period === "month") {
     return published >= `${asOf.slice(0, 8)}01`;
   }
-  return published >= shiftIso(asOf, -7);
+  return true;
 }
 
 function visibleFeed() {
@@ -242,12 +248,6 @@ function periodMenu() {
   return dropdown("period", "chip", current[1], options, state.period);
 }
 
-function modeMenu() {
-  const current = modes.find((row) => row[0] === state.mode) || modes[0];
-  const options = modes.map(([id, label]) => ({ id, label }));
-  return dropdown("mode", "chip is-on", current[1], options, state.mode);
-}
-
 function namedMenu(name, title, rows, value) {
   const current = rows.find((row) => row[0] === (value || "all")) || rows[0];
   const options = rows.map(([id, label]) => ({ id, label }));
@@ -291,11 +291,10 @@ function renderHome() {
     ? cards.map((item) => `
         <button class="widget-item" type="button" data-go="card" data-item="${esc(item.id)}">
           ${importance(item.level, item.label)}
-          <strong>${esc(item.title)}</strong>
+          <strong>${esc(displayTitle(item))}</strong>
           <span class="caption">${esc(item.why)}</span>
         </button>`).join("")
     : `<p class="caption">${esc(state.loading ? "Читаем ленты." : "Нет событий выше порога.")}</p>`;
-  const company = state.feed ? state.feed.company : null;
   return `
     <main class="screen">
       ${header("home")}
@@ -303,15 +302,13 @@ function renderHome() {
         <section class="home-main">
           <h1 class="h1">Добрый день</h1>
           <div class="accounts">
-            <article class="account"><p class="caption">Расчётный счёт</p><strong>Суммы счетов не переданы</strong></article>
-            <article class="account"><p class="caption">Депозиты</p><strong>${esc(company ? company.deposit : "…")}</strong></article>
-            <article class="account"><p class="caption">Кредиты</p><strong>${esc(company ? company.loan : "…")}</strong></article>
+            <article class="account"><p class="caption">Расчётный счёт</p><strong>Сумма из банка</strong></article>
+            <article class="account"><p class="caption">Депозиты</p><strong>Сумма из банка</strong></article>
+            <article class="account"><p class="caption">Кредиты</p><strong>Сумма из банка</strong></article>
           </div>
           <section class="payments">
             <h2 class="h3">Последние платежи</h2>
-            <div class="payments-list" role="region" aria-label="Последние платежи" tabindex="0">
-              ${paymentLines(company)}
-            </div>
+            <p class="caption">Обычный блок интернет-банка, в прототипе не детализируем</p>
           </section>
         </section>
         <aside class="widget">
@@ -328,87 +325,35 @@ function renderHome() {
     </main>`;
 }
 
-function paymentLines(company) {
-  const rows = company && Array.isArray(company.payments) ? company.payments : [];
-  if (!rows.length) {
-    return `<p class="caption">Исходящих платежей этой компании нет.</p>`;
-  }
-  return rows.map((row) => `
-    <p class="body">${esc(row.beneficiary)} · ${esc(row.amount)} · ${esc(row.count)} платежей</p>
-  `).join("");
-}
-
-function eventForm() {
-  const asOf = state.feed && state.feed.as_of ? state.feed.as_of : "2026-10-21";
-  return `
-    <section class="rail-card add-form">
-      <h2 class="h3">Проверить новую новость</h2>
-      <p class="caption">Тот же классификатор и порог, что у ленты. Дата позже сценария скрывает событие.</p>
-      <form data-event>
-        <input name="title" type="text" maxlength="300" placeholder="Заголовок">
-        <textarea name="body" maxlength="4000" placeholder="Текст события"></textarea>
-        <input name="published" type="date" value="${esc(asOf)}">
-        <input name="url" type="text" maxlength="1000" placeholder="Ссылка на первоисточник, необязательно">
-        <button class="btn" type="submit">Добавить материал</button>
-      </form>
-      <p class="caption">${esc(state.eventNote)}</p>
-    </section>
-    <section class="rail-card add-form">
-      <h2 class="h3">Уточняющий вопрос</h2>
-      <form data-analyze>
-        <input name="q" type="text" maxlength="1000" placeholder="Что означает изменение спроса?" value="${esc(state.asked)}">
-        <button class="btn" type="submit">Подготовить анализ</button>
-      </form>
-      <p class="caption">${esc(state.analysisNote)}</p>
-    </section>`;
-}
-
-function analysisBlock() {
-  const result = state.analysis;
-  if (!result) {
-    return "";
-  }
-  const status = {
-    rules_only: "Интерпретация по правилам. Это не ответ языковой модели.",
-    model_verified: "Вывод модели проверен по структуре, ссылкам и числам. Смысл требует экспертной оценки.",
-    model_failed: "Шлюз недоступен. Показаны правила, лента сохранена.",
-    model_rejected: "Ответ модели не прошёл проверку. Показаны правила.",
-    insufficient_evidence: "Нет новостей выше порога.",
-    missing_profile: "Компания отсутствует в справочнике.",
-  }[result.status] || result.status;
-  const claims = (result.claims || []).map((row) => `
-    <div class="point">
-      <strong>${esc(row.title)}</strong>
-      <p>${esc(row.text)}</p>
-      <p class="caption">Основание: ${esc((row.sources || []).join(", "))}</p>
-    </div>`).join("");
-  const gaps = (result.gaps || []).map((gap) => `<p class="caption">${esc(gap)}</p>`).join("");
-  const banks = (result.banks || []).map((row) => `
-    <div class="point">${origin("bank")}<p>${esc(row.title)}. ${esc(row.text)}</p></div>`).join("");
-  const trace = (result.trace || []).map((step) => `
-    <p class="caption">${esc(step.tool)} · ${esc(step.status)} · ${esc(step.detail)}</p>`).join("");
-  return `
-    <section class="rail-card">
-      <h2 class="h3">Персональная интерпретация</h2>
-      <p class="caption">${esc(status)}</p>
-      ${claims}
-      ${gaps}
-      <h3 class="body" style="font-weight:600">Аналитика Альфа-Банка</h3>
-      ${banks || `<p class="caption">Свежей карточки банка в этом разборе нет.</p>`}
-      <h3 class="body" style="font-weight:600">Журнал шагов</h3>
-      ${trace}
-      <button class="btn btn-secondary" type="button" data-download="1">Скачать анализ и журнал (JSON)</button>
-    </section>`;
-}
-
 function profileFields() {
   const company = state.feed ? state.feed.company : null;
   const rows = company && Array.isArray(company.rows) ? company.rows : [];
   if (!rows.length) {
     return `<p class="caption">Профиль ещё не загружен.</p>`;
   }
-  return rows.map((row) => `
-    <div class="field"><p class="caption">${esc(row.label)}</p><p class="body">${esc(row.value)}</p></div>
+  const value = (label) => {
+    const row = rows.find((item) => item.label === label);
+    return row ? String(row.value) : "";
+  };
+  const industry = value("Отрасль").replace(", ОКВЭД ", " (ОКВЭД ");
+  const industryText = industry.includes("(ОКВЭД ") ? `${industry})` : industry;
+  const revenue = value("Выручка");
+  const staff = value("Штат");
+  const scale = [`Выручка ${revenue}`, staff].filter((part) => part && part !== "Выручка ").join(", ");
+  const products = value("Продукты в Альфе");
+  const titled = products ? products.charAt(0).toUpperCase() + products.slice(1) : "";
+  const trade = value("ВЭД");
+  const ved = !trade || trade === "не отмечена" ? "не отмечена" : `${trade} (по данным ФТС)`;
+  const region = company.region ? company.region : "не указан";
+  const fields = [
+    ["Отрасль", industryText],
+    ["Масштаб", scale],
+    ["Продукты в Альфе", titled],
+    ["ВЭД", ved],
+    ["Регион", region],
+  ];
+  return fields.map(([label, text]) => `
+    <div class="field"><p class="caption">${esc(label)}</p><p class="body">${esc(text)}</p></div>
   `).join("");
 }
 
@@ -422,11 +367,11 @@ function renderFeed() {
           <span class="caption">${esc(item.published)} · ${esc(item.source_name)}</span>
           <span class="caption event-score">Значимость ${esc(item.score)}</span>
         </div>
-        <h2 class="h3">${esc(item.title)}</h2>
+        <h2 class="h3">${esc(displayTitle(item))}</h2>
         <p class="body muted">Почему вам: ${esc(item.why)}</p>
         <div class="factors">${(item.factors || []).map((factor) => `<span class="factor">${esc(factor.label)}</span>`).join("")}</div>
       </button>`).join("")
-    : `<p class="body">${esc(state.error || (state.loading ? "Считаем ленту." : "Нет новостей выше порога."))}</p>`;
+    : `<p class="body">${esc(state.error || (state.loading ? "Считаем ленту." : "Нет событий по этим фильтрам."))}</p>`;
   const incoming = state.feed ? state.feed.incoming : 0;
   const ranked = state.feed ? state.feed.ranked : 0;
   const updated = state.feed ? state.feed.loaded_at : "";
@@ -440,19 +385,18 @@ function renderFeed() {
             <div class="spacer"></div>
             <button class="btn btn-secondary" type="button" data-go="profile">Настроить темы</button>
           </div>
-          <p class="body muted">Мы отобрали события, которые влияют на вашу компанию, и объяснили почему. Обновлено ${esc(updated)}. <button class="text-btn" type="button" data-refresh="1">Обновить</button></p>
+          <p class="body muted">Мы отобрали события, которые влияют на вашу компанию, и объяснили почему. Обновлено <span data-updated>${esc(updated)}</span>.</p>
           ${notice()}
           <div class="filters">
-            ${modeMenu()}
             ${roleMenu()}
             ${periodMenu()}
             ${namedMenu("level", "Важность", levels, state.level)}
             ${namedMenu("topic", "Тема", topicFilters, state.topic)}
           </div>
-          <div class="feed-list">${cards}</div>
-          <p class="caption">Показаны ${rows.length} из ${incoming} событий. Выше порога: ${ranked}. Остальные скрыты для этой компании и роли.</p>
-          ${eventForm()}
-          ${analysisBlock()}
+          <div class="feed-scroll">
+            <div class="feed-scroll-list" role="region" aria-label="Спарсенные события" tabindex="0">${cards}</div>
+          </div>
+          <p class="caption">В списке ${rows.length} из ${incoming} спарсенных событий. Выше порога: ${ranked}.</p>
         </section>
         <aside class="side">
           <h2 class="h3">Что мы учитываем о компании</h2>
@@ -489,18 +433,44 @@ function effectColumn(title, className, rows, empty) {
   return `<div class="col ${className}"><h3>${title}</h3>${points}</div>`;
 }
 
-function effectsBlock(card) {
+function withModelPoint(rows, text) {
+  const base = Array.isArray(rows) ? rows.slice() : [];
+  if (!text) {
+    return base;
+  }
+  return [{ kind: "ai", text }].concat(base);
+}
+
+function gapLine(card, extra) {
+  const modelGap = String(extra || "").trim();
+  if (modelGap) {
+    const text = modelGap.startsWith("Каких данных нет")
+      ? modelGap
+      : `Каких данных нет: ${modelGap.replace(/\.$/, "")}.`;
+    return `<p class="gap-line">${esc(text)}</p>`;
+  }
+  const stored = card.effects && card.effects.gaps ? card.effects.gaps : "";
+  return stored ? `<p class="gap-line">${esc(stored)}</p>` : "";
+}
+
+function effectsBlock(card, item) {
   const effects = card.effects || {};
-  const gaps = effects.gaps
-    ? `<p class="gap-line">${esc(effects.gaps)}</p>`
-    : "";
+  const model = item && state.cardEffects[item.id] ? state.cardEffects[item.id] : {};
   return block("ai", "03", "ПОСЛЕДСТВИЯ", "Риски, возможности, факторы", `
     <div class="cols">
-      ${effectColumn("Риски", "col-risk", effects.risks, "Отдельный риск по профилю не выделен.")}
-      ${effectColumn("Возможности", "col-chance", effects.opportunities, "Отдельная возможность по профилю не выделена.")}
-      ${effectColumn("Что повлияет дальше", "col-next", effects.next, "В материалах банка нет отдельного будущего события.")}
+      ${effectColumn("Риски", "col-risk", withModelPoint(effects.risks, model.risk), "Отдельный риск по профилю не выделен.")}
+      ${effectColumn("Возможности", "col-chance", withModelPoint(effects.opportunities, model.opportunity), "Отдельная возможность по профилю не выделена.")}
+      ${effectColumn("Что повлияет дальше", "col-next", withModelPoint(effects.next, model.next), "Следующий ориентир по срокам — в позиции банка ниже.")}
     </div>
-    ${gaps}`);
+    ${gapLine(card, model.gaps)}`);
+}
+
+function modelParagraphs(text) {
+  const parts = String(text || "").split(/(?<=\.)\s+/).filter(Boolean);
+  if (!parts.length) {
+    return `<p class="body"></p>`;
+  }
+  return parts.map((line) => `<p class="body">${esc(line)}</p>`).join("");
 }
 
 function bankParagraphs(text) {
@@ -521,9 +491,7 @@ function renderCard() {
       </main>`;
   }
   const card = item.card;
-  const modelText = card.model
-    ? card.model
-    : "Модель на просмотр ленты не вызывается. Вывод появится только по отдельному запросу анализа.";
+  const modelText = card.model || MODEL_LATER;
   return `
     <main class="screen">
       ${header("feed")}
@@ -534,15 +502,15 @@ function renderCard() {
             ${importance(item.level, item.label)}
             <span class="caption">${esc(item.published)} · ${esc(item.source_name)}</span>
           </div>
-          <h1 class="h1">${esc(item.title)}</h1>
+          <h1 class="h1">${esc(displayTitle(item))}</h1>
           ${block("ink", "01", "ФАКТ", esc(item.source_name), `
             <div class="claim">${origin("fact")}<p class="body">${esc(card.happened)}</p></div>`)}
           ${block("mid", "02", "СВЯЗЬ С КОМПАНИЕЙ", "Профиль компании", `
             <div class="claim">${origin("fact")}<p class="body">${esc(card.why || "Для этого события ранжирование не назвало отдельную причину.")}</p></div>`)}
-          ${effectsBlock(card)}
+          ${effectsBlock(card, item)}
           ${block("bank", "04", "ПОЗИЦИЯ БАНКА", "Материал банка", `
             <div class="claim">${origin("bank")}<div class="stack">${bankParagraphs(card.bank)}</div></div>`)}
-          ${block("ai", "05", "ВЫВОД МОДЕЛИ", "Не вызывалась", `
+          ${block("ai", "05", "ВЫВОД МОДЕЛИ", "По запросу анализа", `
             <div class="claim">${origin("ai")}<p class="body">${esc(modelText)}</p></div>`)}
           ${block("ink", "06", "ПЕРЕХОД К ИСТОЧНИКУ", "Основания вывода", `
             <p class="body">${esc(item.source_name)} · <a class="text-btn" href="${esc(item.source_url)}" target="_blank" rel="noopener noreferrer">открыть материал</a> · <button class="text-btn" type="button" data-go="source" data-item="${esc(item.id)}">карточка источника</button></p>
@@ -585,13 +553,13 @@ function cardRail(item) {
     </section>
     <section class="legend">
       <strong>Как читать карточку</strong>
-      <p>Блоки 01–04 собраны из новости, профиля и карточки банка. Блок 05 пуст, пока модель не запрошена отдельно.</p>
+      <p>Блоки 01–04 собраны из новости, профиля и карточки банка. Блок 05 заполняет подключённая модель, когда карточка открыта. Позицию банка модель не заменяет.</p>
     </section>`;
 }
 
 function clarifyPanel() {
   const item = selected();
-  const title = item ? item.title : "Событие не выбрано";
+  const title = item ? displayTitle(item) : "Событие не выбрано";
   const result = state.analysis;
   const pending = state.analysisNote
     ? `<p class="caption">${esc(state.analysisNote)}</p>`
@@ -620,13 +588,14 @@ function clarifyPanel() {
         <button class="text-btn" type="button" data-close-ask="1">Закрыть</button>
       </div>
       <p class="caption">${esc(title)}</p>
+      ${state.replyQuestion ? `<p class="body">Вопрос: ${esc(state.replyQuestion)}</p>` : ""}
       ${asked}
       ${answer}
       <div class="suggests">
         ${suggestions.map((line) => `<button class="suggest" type="button" data-prefill="${esc(line)}">${esc(line)}</button>`).join("")}
       </div>
       <form class="panel-input" data-ask="1">
-        <input name="q" type="text" placeholder="Ваш вопрос" value="${esc(state.asked)}">
+        <input name="q" type="text" placeholder="${state.replyQuestion ? "Ваш ответ" : "Ваш вопрос"}" value="${state.replyQuestion ? "" : esc(state.asked)}">
         <button class="btn" type="submit">Спросить</button>
       </form>
       <div class="note">
@@ -640,18 +609,56 @@ function choice(group, id) {
   return `<button class="chip ${on}" type="button" data-choice="${group}:${id}">${id}</button>`;
 }
 
+function profileBankRows(company) {
+  const rows = company && Array.isArray(company.rows) ? company.rows : [];
+  const value = (label) => {
+    const row = rows.find((item) => item.label === label);
+    return row ? String(row.value) : "";
+  };
+  const scale = [value("Выручка"), value("Штат")].filter(Boolean).join(", ");
+  const trade = value("ВЭД");
+  const ved = !trade || trade === "не отмечена"
+    ? "Не отмечена"
+    : `Есть, ${trade} (данные ФТС)`;
+  const products = value("Продукты в Альфе");
+  const titled = products ? products.charAt(0).toUpperCase() + products.slice(1) : "";
+  const payments = company && Array.isArray(company.payments) ? company.payments.length : 0;
+  const counterparties = payments
+    ? `${recipientCount(payments)}; события по ним попадают в ленту, если доля от 10%`
+    : "События по контрагентам попадают в ленту, если доля от 10%";
+  return [
+    ["Отрасль", value("Отрасль")],
+    ["Выручка и масштаб", scale],
+    ["Группа компаний", "Учитываем события по всей группе"],
+    ["Продукты в Альфе", titled],
+    ["ВЭД", ved],
+    ["Крупные контрагенты", counterparties],
+  ];
+}
+
+function recipientCount(count) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  let word = "получателей";
+  if (mod10 === 1 && mod100 !== 11) {
+    word = "получатель";
+  } else if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    word = "получателя";
+  }
+  return `${count} ${word} платежей`;
+}
+
 function renderProfile() {
   const company = state.feed ? state.feed.company : null;
-  const rows = company && Array.isArray(company.rows) ? company.rows : [];
-  const bankRows = rows.map((row) => `
-    <div class="row"><dt>${esc(row.label)}</dt><dd>${esc(row.value)}</dd></div>
+  const bankRows = profileBankRows(company).map(([label, value]) => `
+    <div class="row"><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>
   `).join("");
   return `
     <main class="screen">
       ${header("feed")}
       <div class="content stack" style="gap:16px">
         <h1 class="h1">Что сервис знает о компании</h1>
-        <p class="body muted profile-lead">Эти сведения уже есть в профиле компании. От них зависит, какие события поднимаются выше порога. Уточнения справа в профиль не пишутся.</p>
+        <p class="body muted profile-lead">Эти данные определяют, какие события попадут в вашу ленту. Часть мы берём из банка, часть можете уточнить вы: тогда выводы станут точнее, а пометок «вывод ИИ» станет меньше.</p>
         <div class="columns">
           <section class="profile-card">
             <h2 class="h3">Из данных банка</h2>
@@ -659,7 +666,7 @@ function renderProfile() {
           </section>
           <section class="profile-card profile-card-edit">
             <h2 class="h3">Уточните сами</h2>
-            <p class="caption profile-hint">Этого нет в профиле. Скрытая тема только прячет фактор.</p>
+            <p class="caption profile-hint">Этого нет в данных банка, сейчас модель делает предположение</p>
             <div class="group">
               <h3 class="body" style="font-weight:600">Торговля с Китаем</h3>
               <div class="choice-row">${choice("trade", "Импорт")}${choice("trade", "Экспорт")}${choice("trade", "Оба направления")}</div>
@@ -694,14 +701,14 @@ function renderSource() {
     <main class="screen">
       <header class="header">
         <button class="logo" type="button" data-go="home">Альфа-Бизнес</button>
-        <p class="crumb">События / ${esc(item.title)} / Источник</p>
+        <p class="crumb">События / ${esc(displayTitle(item))} / Источник</p>
       </header>
       <div class="content content-tight">
         <section class="source-card">
-          <h2 class="h3" style="width:420px;max-width:100%">${esc(item.title)}</h2>
+          <h2 class="h3" style="width:420px;max-width:100%">${esc(displayTitle(item))}</h2>
           <div class="snippet"><b>01 ФАКТ</b><span>${esc(card.happened)}</span></div>
           <div class="snippet"><b>04 ПОЗИЦИЯ БАНКА</b><span>${esc(card.bank)}</span></div>
-          <div class="snippet"><b>05 ВЫВОД МОДЕЛИ</b><span>${esc(card.model || "Модель не вызывалась")}</span></div>
+          <div class="snippet"><b>05 ВЫВОД МОДЕЛИ</b><span>${esc(card.model || MODEL_LATER)}</span></div>
           <p class="caption" style="width:420px;max-width:100%">Карточка остаётся открытой: можно продолжить работу</p>
         </section>
         <article class="doc">
@@ -773,6 +780,9 @@ function paint() {
       }
     });
   });
+  root.querySelectorAll("[data-help-panel]").forEach((panel) => {
+    panel.addEventListener("click", (event) => event.stopPropagation());
+  });
   root.querySelectorAll("[data-menu]").forEach((node) => {
     node.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -789,58 +799,13 @@ function paint() {
       chooseMenu(raw.slice(0, splitAt), raw.slice(splitAt + 1));
     });
   });
-  const refresh = root.querySelector("[data-refresh]");
-  if (refresh) {
-    refresh.addEventListener("click", () => loadFeed(true));
-  }
-  root.querySelectorAll("[data-mode]").forEach((node) => {
-    node.addEventListener("click", () => setMode(node.getAttribute("data-mode")));
-  });
-  const eventFormNode = root.querySelector("[data-event]");
-  if (eventFormNode) {
-    eventFormNode.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const data = new FormData(eventFormNode);
-      addEvent({
-        title: String(data.get("title") || ""),
-        body: String(data.get("body") || ""),
-        published: String(data.get("published") || ""),
-        url: String(data.get("url") || ""),
-      });
-    });
-  }
-  const analyze = root.querySelector("[data-analyze]");
-  if (analyze) {
-    analyze.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const field = analyze.querySelector("[name=q]");
-      state.asked = field.value.trim();
-      runAnalysis(state.asked);
-    });
-  }
-  const download = root.querySelector("[data-download]");
-  if (download) {
-    download.addEventListener("click", () => {
-      const text = state.analysis && state.analysis.download;
-      if (!text) {
-        return;
-      }
-      const blob = new Blob([text], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "decision-brief-analysis.json";
-      link.click();
-      URL.revokeObjectURL(url);
-    });
-  }
   const save = root.querySelector("[data-save]");
   if (save) {
     save.addEventListener("click", () => {
       state.profileNote = state.hiddenTopic && state.hiddenTopic !== "Нет"
         ? "Скрытая тема применена к ленте. Остальные ответы в профиль не записаны."
         : "В профиль ничего не записано: этих сведений в нём нет.";
-      paint();
+      go("feed");
     });
   }
   root.querySelectorAll("[data-ask]").forEach((form) => {
@@ -870,40 +835,122 @@ function paint() {
       paint();
     });
   }
+  scheduleFeedWindow();
 }
 
-async function setMode(mode) {
-  if (!mode || state.mode === mode) {
+function displayTitle(item) {
+  if (!item) {
+    return "";
+  }
+  return state.cardTitles[item.id] || item.headline || item.title;
+}
+
+function cardModelText(item) {
+  if (!item) {
+    return "";
+  }
+  if (state.cardModels[item.id]) {
+    return state.cardModels[item.id];
+  }
+  return item.card && item.card.model ? item.card.model : "";
+}
+
+// Kept for the later model block. The screens do not call it.
+function ensureCardModel() {
+  if (state.screen !== "card" && state.screen !== "source") {
     return;
   }
-  state.mode = mode;
-  state.companyId = "";
-  state.companies = [];
-  state.itemId = "";
-  state.analysis = null;
-  await loadFeed(false);
+  const item = selected();
+  if (!item || !state.companyId || cardModelText(item) || state.cardModelPending === item.id) {
+    return;
+  }
+  const itemId = item.id;
+  state.cardModelPending = itemId;
+  const params = new URLSearchParams({
+    mode: state.mode,
+    company: state.companyId,
+    role: state.roleId,
+    item: itemId,
+  });
+  fetch(`/api/card-model?${params}`)
+    .then(async (response) => {
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Вызов модели не выполнен.");
+      }
+      return payload;
+    })
+    .then((payload) => {
+      state.cardModels[itemId] = payload.model || payload.error || "Вызов модели не выполнен.";
+      state.cardEffects[itemId] = payload.effects || {};
+      if (payload.headline) {
+        state.cardTitles[itemId] = payload.headline;
+      }
+    })
+    .catch((error) => {
+      state.cardModels[itemId] = error instanceof Error ? error.message : "Вызов модели не выполнен.";
+    })
+    .finally(() => {
+      if (state.cardModelPending === itemId) {
+        state.cardModelPending = "";
+      }
+      const current = selected();
+      if (current && current.id === itemId && (state.screen === "card" || state.screen === "source")) {
+        paint();
+      }
+    });
 }
 
-async function addEvent(fields) {
-  state.eventNote = "Добавляем материал.";
-  paint();
-  try {
-    const response = await fetch("/api/events", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode: state.mode, ...fields }),
-    });
-    const payload = await response.json();
-    if (!response.ok) {
-      throw new Error(payload.error || "Материал не добавлен");
+function fitFeedWindow() {
+  const list = document.querySelector(".feed-scroll-list");
+  if (!list) {
+    return false;
+  }
+  const cards = [...list.querySelectorAll(".feed-card")];
+  if (cards.length <= 5) {
+    list.style.maxHeight = "none";
+    return true;
+  }
+  const styles = getComputedStyle(list);
+  const gap = parseFloat(styles.rowGap || styles.gap) || 0;
+  const height = cards.slice(0, 5).reduce((sum, card) => sum + card.offsetHeight, 0) + gap * 4;
+  if (height < 40) {
+    return false;
+  }
+  list.style.maxHeight = `${Math.ceil(height)}px`;
+  return true;
+}
+
+let feedWindowObserver = null;
+
+function scheduleFeedWindow() {
+  requestAnimationFrame(() => {
+    if (!fitFeedWindow()) {
+      requestAnimationFrame(() => fitFeedWindow());
     }
-    state.eventNote = `Материалов добавлено: ${payload.added}. Лента пересчитана.`;
-    state.companies = state.companies;
-    await loadFeed(false);
-  } catch (error) {
-    state.eventNote = error instanceof Error ? error.message : "Материал не добавлен";
-    state.loading = false;
-    paint();
+  });
+  const box = document.querySelector(".feed-scroll");
+  if (!box) {
+    return;
+  }
+  if (feedWindowObserver) {
+    feedWindowObserver.disconnect();
+  }
+  let width = box.clientWidth;
+  feedWindowObserver = new ResizeObserver(() => {
+    if (!box.isConnected || box.clientWidth === width) {
+      return;
+    }
+    width = box.clientWidth;
+    fitFeedWindow();
+  });
+  feedWindowObserver.observe(box);
+  if (document.fonts) {
+    document.fonts.ready.then(() => {
+      if (box.isConnected) {
+        fitFeedWindow();
+      }
+    });
   }
 }
 
@@ -952,13 +999,134 @@ async function loadBootstrap() {
   }
 }
 
+function feedShowsNews() {
+  return state.screen === "home" || state.screen === "feed" || state.screen === "card" || state.screen === "source";
+}
+
+function feedStamp(feed) {
+  if (!feed) {
+    return "";
+  }
+  const rows = (feed.items || []).map((item) => (
+    [item.id, item.score, item.title, item.headline, item.why, item.level].join("|")
+  ));
+  return [feed.notice || "", feed.as_of || "", feed.ranked, rows.join("\n")].join("\n");
+}
+
+function captureView() {
+  const active = document.activeElement;
+  const list = document.querySelector(".feed-scroll-list");
+  const fields = [...document.querySelectorAll("input, textarea")].map((element) => ({
+    name: element.name,
+    value: element.value,
+    focused: element === active,
+    start: element.selectionStart,
+    end: element.selectionEnd,
+  }));
+  return { scrollY: window.scrollY, listScroll: list ? list.scrollTop : 0, fields };
+}
+
+function restoreView(saved) {
+  window.scrollTo(0, saved.scrollY);
+  const list = document.querySelector(".feed-scroll-list");
+  if (list) {
+    list.scrollTop = saved.listScroll;
+  }
+  saved.fields.forEach((field) => {
+    if (!field.name) {
+      return;
+    }
+    const element = document.querySelector(`[name="${field.name}"]`);
+    if (!element) {
+      return;
+    }
+    element.value = field.value;
+    if (!field.focused) {
+      return;
+    }
+    element.focus();
+    if (field.start == null) {
+      return;
+    }
+    try {
+      element.setSelectionRange(field.start, field.end);
+    } catch (_error) {
+      // Date inputs do not accept a caret position.
+    }
+  });
+}
+
+function applyFeed(payload) {
+  state.feed = payload;
+  state.roleId = payload.role.id;
+  if (!items().some((row) => row.id === state.itemId)) {
+    state.itemId = items()[0] ? items()[0].id : "";
+  }
+}
+
+async function refreshFeedQuietly() {
+  if (quietInFlight || state.loading || !state.companyId) {
+    return;
+  }
+  quietInFlight = true;
+  const epoch = feedEpoch;
+  try {
+    const params = new URLSearchParams({
+      mode: state.mode,
+      company: state.companyId,
+      role: state.roleId,
+    });
+    const response = await fetch(`/api/feed?${params}`);
+    const payload = await response.json();
+    if (epoch !== feedEpoch || state.loading || !response.ok || !state.feed) {
+      return;
+    }
+    if (feedStamp(payload) === feedStamp(state.feed)) {
+      state.feed.loaded_at = payload.loaded_at;
+      const node = document.querySelector("[data-updated]");
+      if (node) {
+        node.textContent = payload.loaded_at;
+      }
+      return;
+    }
+    const saved = captureView();
+    applyFeed(payload);
+    if (!feedShowsNews()) {
+      return;
+    }
+    paint();
+    restoreView(saved);
+  } catch (_error) {
+    // A missed poll keeps the feed already on screen.
+  } finally {
+    quietInFlight = false;
+  }
+}
+
+function watchFeed() {
+  window.setInterval(() => {
+    if (!document.hidden) {
+      refreshFeedQuietly();
+    }
+  }, FEED_POLL_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      refreshFeedQuietly();
+    }
+  });
+}
+
 async function loadFeed(refresh) {
+  const epoch = ++feedEpoch;
   state.loading = true;
   state.error = "";
   paint();
   try {
     if (!state.companies.length) {
       await loadBootstrap();
+    }
+    if (epoch !== feedEpoch) {
+      return;
     }
     const params = new URLSearchParams({
       mode: state.mode,
@@ -970,19 +1138,23 @@ async function loadFeed(refresh) {
     }
     const response = await fetch(`/api/feed?${params}`);
     const payload = await response.json();
+    if (epoch !== feedEpoch) {
+      return;
+    }
     if (!response.ok) {
       throw new Error(payload.error || "Лента не загрузилась");
     }
-    state.feed = payload;
-    state.roleId = payload.role.id;
-    if (!items().some((row) => row.id === state.itemId)) {
-      state.itemId = items()[0] ? items()[0].id : "";
-    }
+    applyFeed(payload);
   } catch (error) {
+    if (epoch !== feedEpoch) {
+      return;
+    }
     state.error = error instanceof Error ? error.message : "Лента не загрузилась";
   } finally {
-    state.loading = false;
-    paint();
+    if (epoch === feedEpoch) {
+      state.loading = false;
+      paint();
+    }
   }
 }
 
@@ -1018,4 +1190,5 @@ document.addEventListener("keydown", (event) => {
 
 applyRoute();
 paint();
-loadFeed(false);
+watchFeed();
+loadFeed(true);

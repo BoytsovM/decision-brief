@@ -324,6 +324,44 @@ def score_for_role(
     return adjusted, reasons + extra
 
 
+def score_every_item(
+    company: CompanyProfile,
+    items: list[NewsItem],
+    role: Role,
+    *,
+    as_of: date,
+    counterparties: Sequence[CounterpartyShare] = (),
+) -> list[ScoredItem]:
+    """Score every parsed item, including those below the show threshold.
+
+    Order is the multiplied score, highest first. From 0.6 the item is
+    important, from 0.3 it is a notice, and below that it stays in the
+    list with ``Relevance.HIDDEN``. A material older than a year stays
+    at 0. The attached bank card is the newest fresh card for the
+    strongest factor.
+    """
+    scored: list[ScoredItem] = []
+    for item in items:
+        value, reasons = score_for_role(
+            company,
+            item,
+            role,
+            as_of=as_of,
+            counterparties=counterparties,
+        )
+        scored.append(
+            ScoredItem(
+                item=item,
+                score=value,
+                relevance=relevance_for(value),
+                reasons=reasons,
+                bank_card=_bank_card_for(item),
+            )
+        )
+    scored.sort(key=lambda row: row.score, reverse=True)
+    return scored
+
+
 def rank_for_role(
     company: CompanyProfile,
     items: list[NewsItem],
@@ -338,29 +376,14 @@ def rank_for_role(
     from 0.3 it is a notice, and below that it is hidden. The attached
     bank card is the newest fresh card for the strongest factor.
     """
-    scored: list[ScoredItem] = []
-    for item in items:
-        value, reasons = score_for_role(
-            company,
-            item,
-            role,
-            as_of=as_of,
-            counterparties=counterparties,
-        )
-        label = relevance_for(value)
-        if label is Relevance.HIDDEN:
-            continue
-        scored.append(
-            ScoredItem(
-                item=item,
-                score=value,
-                relevance=label,
-                reasons=reasons,
-                bank_card=_bank_card_for(item),
-            )
-        )
-    scored.sort(key=lambda row: row.score, reverse=True)
-    return scored
+    scored = score_every_item(
+        company,
+        items,
+        role,
+        as_of=as_of,
+        counterparties=counterparties,
+    )
+    return [row for row in scored if row.relevance is not Relevance.HIDDEN]
 
 
 def _workbook_candidates() -> tuple[Path, ...]:

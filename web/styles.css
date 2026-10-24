@@ -226,28 +226,6 @@ select.company {
   cursor: pointer;
 }
 
-.add-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.add-form input,
-.add-form textarea {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font: inherit;
-  color: inherit;
-  background: var(--surface);
-}
-
-.add-form textarea {
-  min-height: 72px;
-  resize: vertical;
-}
-
 .banner {
   margin: 0;
   padding: 10px 12px;
@@ -568,6 +546,30 @@ select.company {
   color: var(--on-brand);
 }
 
+.feed-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 18px 20px;
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.feed-scroll-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.feed-scroll-list > .feed-card,
+.feed-scroll-list > p {
+  flex-shrink: 0;
+}
+
 .feed-list {
   display: flex;
   flex-direction: column;
@@ -771,6 +773,7 @@ select.company {
 .col-next { background: var(--bg); }
 
 .col h3 {
+  margin: 0;
   font-size: 15px;
   font-weight: 600;
   line-height: 22px;
@@ -820,11 +823,17 @@ select.company {
 }
 
 .ask-inline p {
+  flex: 1 0 0;
   margin: 0;
   font-size: 15px;
   font-weight: 600;
   line-height: 22px;
   color: var(--origin-ai-text);
+}
+
+.ask-inline .btn {
+  flex: none;
+  margin-left: auto;
 }
 
 .composer {

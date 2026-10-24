@@ -267,6 +267,80 @@ class ModelConclusionTest(unittest.TestCase):
         self.assertEqual(gateway_model_id("z-ai/glm-5.3-flash"), "z-ai/glm-5.3-flash")
         self.assertFalse(allowed_model("qwen/qwen3-vl-30b-a3b-instruct"))
 
+    def test_opened_card_calls_the_model_below_the_show_threshold(self) -> None:
+        from decision_brief.conclusion import model_conclusion, opened_card_conclusion
+
+        company = _company()
+        hidden = ScoredItem(
+            item=_hidden_item(),
+            score=0.1,
+            relevance=Relevance.HIDDEN,
+            reasons=("Ниже порога показа.",),
+            bank_card=None,
+        )
+        payload = json.dumps(
+            {
+                "последствия": "Нагрузка на лизинг не снижается.",
+                "риск": "Пауза оставляет деньги дорогими.",
+                "возможность": "Есть время пересмотреть график.",
+                "что проверить": "Долю лизинга в платежах.",
+            },
+            ensure_ascii=False,
+        )
+        client = _RecordingClient(payload)
+        text = opened_card_conclusion(
+            company,
+            hidden,
+            role=Role.TREASURER,
+            client=client,
+        )
+        self.assertEqual(len(client.prompts), 1)
+        self.assertIn("Нагрузка на лизинг не снижается.", text)
+        self.assertNotIn("77,7", client.prompts[0])
+        skipped = model_conclusion(
+            company,
+            hidden,
+            role=Role.TREASURER,
+            client=client,
+            shown=(hidden,),
+        )
+        self.assertEqual(skipped, "")
+        self.assertEqual(len(client.prompts), 1)
+
+    def test_reader_parts_drop_internal_tokens(self) -> None:
+        from decision_brief.conclusion import reader_model_parts
+
+        raw = json.dumps(
+            {
+                "последствия": (
+                    "Почему кредиты остаются дорогими. "
+                    "Платежи по лизингу не снизятся в ближайшие месяцы. "
+                    "Пауза 23 октября оставляет стоимость денег высокой. "
+                    "На ваш бизнес это влияет через стоимость кредита и лизинга."
+                ),
+                "риск": "Для U_1595 retail при ставке 14,0% лизинг дороже.",
+                "возможность": "Пауза даёт время пересмотреть график лизинга.",
+                "дальше": "Решение 23 октября задаст платежи до конца года.",
+                "что проверить": "Долю долга по плавающей ставке.",
+                "ответ": "Доля плавающей ставки в данных не указана.",
+            },
+            ensure_ascii=False,
+        )
+        source = "Ставка 14,0%. Пауза 23 октября."
+        parts = reader_model_parts(raw, source)
+        self.assertNotIn("U_1595", parts["risk"])
+        self.assertNotIn("retail", parts["risk"].casefold())
+        self.assertIn("14,0%", parts["risk"])
+        self.assertIn("лизинг", parts["opportunity"])
+        self.assertTrue(parts["gaps"].startswith("Долю долга"))
+        self.assertNotIn("очему", parts["summary"].casefold())
+        self.assertEqual(parts["summary"].count("."), 4)
+        self.assertIn("На ваш бизнес это влияет через", parts["summary"])
+        self.assertIn("23 октября", parts["next"])
+        self.assertIn("не указана", parts["answer"])
+        task = json.dumps({"дальше": "Проверить валютную позицию и график."}, ensure_ascii=False)
+        self.assertEqual(reader_model_parts(task, source)["next"], "")
+
 
 if __name__ == "__main__":
     unittest.main()

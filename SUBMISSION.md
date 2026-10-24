@@ -24,6 +24,8 @@ PDF не содержит календарной даты дедлайна; ср
 | Назначение, архитектура и компоненты | `README.md` |
 | Окружение, переменные, запуск | `README.md`, `.env.example` |
 | Docker и единый запуск | `Dockerfile`, `compose.yaml`: `docker compose up --build --wait` |
+| Экраны продукта | http://localhost:8780, каталог `web/`, процесс `frontend` |
+| Прежний экран агента | http://localhost:8501, процесс `screen` |
 | Фиксация языка и зависимостей | `.python-version`, digest образа, `requirements.txt`, `pyproject.toml` |
 | Сторонние компоненты и имитации | `THIRD_PARTY_NOTICES` |
 | Синтетические данные | `data/sample/companies.csv`, `payments.csv`, `news.xml` |
