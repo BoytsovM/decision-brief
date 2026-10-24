@@ -70,6 +70,8 @@ input:focus-visible {
 }
 
 .header {
+  position: relative;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 24px;
@@ -131,6 +133,83 @@ dl {
 select.company {
   border: 0;
   cursor: pointer;
+}
+
+.company-btn,
+.menu .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.company-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.menu.is-open {
+  z-index: 30;
+}
+
+.caret {
+  display: block;
+  flex: none;
+  transition: transform 160ms ease;
+}
+
+.menu.is-open .caret {
+  transform: rotate(180deg);
+}
+
+.menu-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  width: max-content;
+  min-width: 100%;
+  max-width: min(480px, calc(100vw - 48px));
+  max-height: 320px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(11, 31, 53, 0.12);
+}
+
+.menu-end .menu-list {
+  left: auto;
+  right: 0;
+}
+
+.menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.menu-item:hover,
+.menu-item.is-on {
+  background: var(--bg);
 }
 
 .role-pick {

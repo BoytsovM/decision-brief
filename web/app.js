@@ -32,10 +32,17 @@ const state = {
   analysisNote: "",
   askOpen: false,
   managerNote: "",
+  openMenu: "",
+  period: "week",
 };
 
+const periods = [
+  ["today", "Сегодня"],
+  ["week", "Неделя"],
+  ["month", "Месяц"],
+];
+
 const topicFilters = [
-  ["week", "Неделя ▾"],
   ["all", "Все"],
   ["important", "Важно"],
   ["rate", "Ставка и долг"],
@@ -64,8 +71,28 @@ function esc(value) {
     .replaceAll('"', "&quot;");
 }
 
+function chooseMenu(name, value) {
+  state.openMenu = "";
+  if (name === "period") {
+    state.period = value;
+    paint();
+    return;
+  }
+  state.itemId = "";
+  state.analysis = null;
+  state.analysisNote = "";
+  if (name === "company") {
+    state.companyId = value;
+  }
+  if (name === "role") {
+    state.roleId = value;
+  }
+  loadFeed(false);
+}
+
 function go(screen) {
   state.screen = screen;
+  state.openMenu = "";
   if (screen !== "card") {
     state.askOpen = false;
   }
@@ -110,16 +137,30 @@ function hiddenIds() {
   return hiddenFactors[state.hiddenTopic] || [];
 }
 
-function visibleFeed() {
+function inPeriod(item) {
   const asOf = state.feed ? state.feed.as_of : "";
+  const published = item.published_iso || "";
+  if (!asOf || !published) {
+    return true;
+  }
+  if (published > asOf) {
+    return false;
+  }
+  if (state.period === "today") {
+    return published === asOf;
+  }
+  if (state.period === "month") {
+    return published >= `${asOf.slice(0, 8)}01`;
+  }
+  return published >= shiftIso(asOf, -7);
+}
+
+function visibleFeed() {
   const hidden = hiddenIds();
   return items().filter((item) => {
     const ids = (item.factors || []).map((factor) => factor.id);
     if (hidden.some((id) => ids.includes(id))) {
       return false;
-    }
-    if (state.filter === "week" && asOf) {
-      return item.published_iso >= shiftIso(asOf, -7) && item.published_iso <= asOf;
     }
     if (!state.filter || state.filter === "all") {
       return true;
@@ -132,22 +173,43 @@ function visibleFeed() {
   });
 }
 
-function companyOptions() {
-  return state.companies
-    .map((company) => {
-      const selectedMark = company.id === state.companyId ? " selected" : "";
-      return `<option value="${esc(company.id)}"${selectedMark}>${esc(company.chip)}</option>`;
-    })
-    .join("");
+function caret() {
+  return `<svg class="caret" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.2 4.4 6 8.1 9.8 4.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
 
-function roleOptions() {
-  return state.roles
-    .map((role) => {
-      const selectedMark = role.id === state.roleId ? " selected" : "";
-      return `<option value="${esc(role.id)}"${selectedMark}>${esc(role.label)}</option>`;
-    })
-    .join("");
+function dropdown(name, buttonClass, label, options, value, menuClass) {
+  const open = state.openMenu === name;
+  const rows = options.map((option) => {
+    const on = option.id === value ? " is-on" : "";
+    return `<button class="menu-item${on}" type="button" role="option" data-pick="${esc(name)}:${esc(option.id)}">${esc(option.label)}</button>`;
+  }).join("");
+  const list = open ? `<div class="menu-list" role="listbox">${rows}</div>` : "";
+  const placed = menuClass ? ` ${menuClass}` : "";
+  return `
+    <div class="menu${placed}${open ? " is-open" : ""}">
+      <button class="${buttonClass}" type="button" data-menu="${esc(name)}" aria-expanded="${open ? "true" : "false"}">
+        <span>${esc(label)}</span>${caret()}
+      </button>
+      ${list}
+    </div>`;
+}
+
+function companyMenu() {
+  const current = state.companies.find((company) => company.id === state.companyId) || state.companies[0];
+  const options = state.companies.map((company) => ({ id: company.id, label: company.chip }));
+  return dropdown("company", "company-btn", current ? current.chip : "Компания", options, state.companyId, "menu-end");
+}
+
+function roleMenu() {
+  const current = state.roles.find((role) => role.id === state.roleId);
+  const options = state.roles.map((role) => ({ id: role.id, label: role.label }));
+  return dropdown("role", "chip is-on", `Роль: ${current ? current.label : ""}`, options, state.roleId);
+}
+
+function periodMenu() {
+  const current = periods.find((row) => row[0] === state.period) || periods[1];
+  const options = periods.map(([id, label]) => ({ id, label }));
+  return dropdown("period", "chip", current[1], options, state.period);
 }
 
 function header(active) {
@@ -155,7 +217,7 @@ function header(active) {
     `<button class="nav-link ${active === id ? "is-active" : ""}" type="button" data-go="${id}">${label}</button>`;
   const line = active === "feed" ? " header-line" : "";
   const company = state.companies.length
-    ? `<select class="company" data-company>${companyOptions()}</select>`
+    ? companyMenu()
     : `<span class="company">Компания</span>`;
   const role = state.roles.find((row) => row.id === state.roleId);
   return `
@@ -306,7 +368,7 @@ function profileFields() {
 }
 
 function renderFeed() {
-  const rows = visibleFeed();
+  const rows = visibleFeed().filter(inPeriod);
   const cards = rows.length
     ? rows.map((item) => `
       <button class="feed-card" type="button" data-go="card" data-item="${esc(item.id)}">
@@ -340,9 +402,8 @@ function renderFeed() {
           <div class="filters">
             <button class="chip ${state.mode === "demo" ? "is-on" : ""}" type="button" data-mode="demo">Демонстрационные события</button>
             <button class="chip ${state.mode === "live" ? "is-on" : ""}" type="button" data-mode="live">Публичные RSS</button>
-            <label class="chip is-on role-pick">Роль:
-              <select data-role>${roleOptions()}</select>
-            </label>
+            ${roleMenu()}
+            ${periodMenu()}
             ${chips}
           </div>
           <div class="feed-list">${cards}</div>
@@ -669,26 +730,22 @@ function paint() {
       }
     });
   });
-  const company = root.querySelector("[data-company]");
-  if (company) {
-    company.addEventListener("change", () => {
-      state.companyId = company.value;
-      state.itemId = "";
-      state.analysis = null;
-      state.analysisNote = "";
-      loadFeed(false);
+  root.querySelectorAll("[data-menu]").forEach((node) => {
+    node.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const name = node.getAttribute("data-menu");
+      state.openMenu = state.openMenu === name ? "" : name;
+      paint();
     });
-  }
-  const role = root.querySelector("[data-role]");
-  if (role) {
-    role.addEventListener("change", () => {
-      state.roleId = role.value;
-      state.itemId = "";
-      state.analysis = null;
-      state.analysisNote = "";
-      loadFeed(false);
+  });
+  root.querySelectorAll("[data-pick]").forEach((node) => {
+    node.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const raw = node.getAttribute("data-pick") || "";
+      const splitAt = raw.indexOf(":");
+      chooseMenu(raw.slice(0, splitAt), raw.slice(splitAt + 1));
     });
-  }
+  });
   const refresh = root.querySelector("[data-refresh]");
   if (refresh) {
     refresh.addEventListener("click", () => loadFeed(true));
@@ -900,6 +957,21 @@ function applyRoute() {
   }
   state.screen = screens[name] ? name : "home";
 }
+
+document.addEventListener("click", () => {
+  if (!state.openMenu) {
+    return;
+  }
+  state.openMenu = "";
+  paint();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.openMenu) {
+    state.openMenu = "";
+    paint();
+  }
+});
 
 applyRoute();
 paint();
