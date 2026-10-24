@@ -53,7 +53,7 @@ class Role(Enum):
 
 ROLE_LABEL_RU: dict[Role, str] = {
     Role.TREASURER: "казначей",
-    Role.CHIEF_ACCOUNTANT: "главбух",
+    Role.CHIEF_ACCOUNTANT: "главный бухгалтер",
     Role.OWNER: "собственник",
 }
 
