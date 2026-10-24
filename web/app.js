@@ -197,7 +197,6 @@ function renderHome() {
       <div class="content">
         <section class="home-main">
           <h1 class="h1">Добрый день</h1>
-          ${notice()}
           <div class="accounts">
             <article class="account"><p class="caption">Расчётный счёт</p><strong>Суммы счетов не переданы</strong></article>
             <article class="account"><p class="caption">Депозиты</p><strong>${esc(company ? company.deposit : "…")}</strong></article>
@@ -214,7 +213,7 @@ function renderHome() {
             <div class="spacer"></div>
             <span class="badge">${esc(badge)}</span>
           </div>
-          <p class="caption">События, которые прошли порог для этой компании и роли</p>
+          <p class="caption">События недели, которые касаются вашей компании</p>
           ${rows}
           <button class="btn" type="button" data-go="feed">Все события</button>
         </aside>
