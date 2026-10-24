@@ -836,6 +836,10 @@ select.company {
   margin-left: auto;
 }
 
+.own-ask {
+  margin-top: 8px;
+}
+
 .composer {
   display: flex;
   align-items: center;
@@ -858,6 +862,24 @@ select.company {
 
 .composer input::placeholder {
   color: var(--text-secondary);
+}
+
+.own-reject {
+  margin: 8px 0 0;
+  color: #ef3124;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.own-ask input:-webkit-autofill,
+.own-ask input:-webkit-autofill:hover,
+.own-ask input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--surface) inset;
+  box-shadow: 0 0 0 1000px var(--surface) inset;
+  -webkit-text-fill-color: var(--text);
+  caret-color: var(--text);
+  transition: background-color 9999s ease-out;
 }
 
 .rail {
@@ -929,6 +951,7 @@ select.company {
   color: inherit;
   font: inherit;
   text-align: left;
+  text-decoration: underline;
 }
 
 .profile-lead {

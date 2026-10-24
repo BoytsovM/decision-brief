@@ -511,36 +511,212 @@ _SIGN_RU: dict[str, str] = {
 
 
 def _reader_fact(text: str) -> str:
-    """One sentence with the event's number, not the article lead."""
+    """A short paragraph from the article, not one clipped sentence.
+
+    The sentence with the figure stays first. When the article itself is
+    only a line or two and gives no figure, one extra sentence says what
+    the text does not contain. It does not invent a number.
+    """
     sentences = _sentences(text)
-    for sentence in sentences:
+    if not sentences:
+        return text.strip()
+    ordered = _ordered_fact_sentences(sentences)
+    kept: list[str] = []
+    for sentence in ordered:
+        candidate = " ".join([*kept, sentence])
+        if kept and len(candidate) > 560:
+            break
+        kept.append(sentence)
+        if len(kept) >= 4:
+            break
+    paragraph = " ".join(kept)
+    if len(paragraph) >= 200 or any(char.isdigit() for char in paragraph):
+        return paragraph
+    gloss = _short_fact_gloss(paragraph)
+    pieces = kept + (_sentences(gloss) if gloss else [])
+    return _paragraph(pieces)
+
+
+def _ordered_fact_sentences(sentences: list[str]) -> list[str]:
+    lead = 0
+    for index, sentence in enumerate(sentences):
         folded = sentence.casefold()
         has_number = any(char.isdigit() for char in sentence)
         if has_number and ("ставк" in folded or "%" in sentence or "руб" in folded):
-            return sentence
-    for sentence in sentences:
-        if len(sentence) >= 40:
-            return sentence
-    return sentences[0] if sentences else text
+            lead = index
+            break
+    else:
+        for index, sentence in enumerate(sentences):
+            if len(sentence) >= 40:
+                lead = index
+                break
+    rest = [sentence for index, sentence in enumerate(sentences) if index != lead]
+    return [sentences[lead], *rest]
+
+
+def _paragraph(parts: list[str]) -> str:
+    """A few plain sentences in one paragraph, not one run-on line."""
+    clauses = [part.strip().rstrip(".") for part in parts if part.strip()]
+    if not clauses:
+        return ""
+    return " ".join(f"{clause}." for clause in clauses[:4])
+
+
+def _short_fact_gloss(text: str) -> str:
+    """What a short article states and what figure it withholds."""
+    folded = text.casefold()
+    if "ставк" in folded and "сохран" in folded:
+        return (
+            "Новой цифры ставки в материале нет. "
+            "Стоимость заёмных денег для компаний из-за этого решения не снижается."
+        )
+    if "топлив" in folded:
+        if "тариф" in folded:
+            return (
+                "Цены за литр в материале нет. "
+                "Сказано другое: тариф обсуждают из-за цен на топливо."
+            )
+        return "Отдельной цены топлива материал не приводит."
+    if "спрос" in folded or "потреблен" in folded:
+        return "Насколько спрос изменился в цифрах, материал не говорит."
+    if "персонал" in folded or "штат" in folded or "зарплат" in folded:
+        return "На сколько выросли расходы на людей, материал не говорит."
+    if "валют" in folded or "юан" in folded or "курс" in folded:
+        return "Конкретного курса и суммы контракта материал не называет."
+    if "закуп" in folded or "строитель" in folded or "бюджет" in folded:
+        return "Сумм контрактов материал не называет."
+    return "Отдельной цифры материал не приводит."
 
 
 def _event_link(company: CompanyProfile, item: NewsItem) -> str:
     """How this event touches the open products. Not a company passport."""
     parts: list[str] = []
     if item.factors.get(Factor.RATE, 0) > 0 and (company.has_loan or company.has_leasing):
-        names: list[str] = []
-        if company.has_loan:
-            names.append("кредиту")
-        if company.has_leasing:
-            names.append("лизингу")
-        joined = " и ".join(names)
-        parts.append(f"Ставка бьёт по уже открытым {joined}.")
+        parts.append(_rate_link(company, item))
     if item.factors.get(Factor.FX, 0) > 0 and company.has_foreign_trade:
-        where = company.foreign_trade_countries or "внешние контракты"
-        parts.append(f"Торговля: {where}. Валюта закупок отсюда не видна.")
+        parts.append(_fx_link(company))
     if not parts:
-        return _company_link(company)
+        return _profile_bridge(company, item)
     return " ".join(parts)
+
+
+def _rate_link(company: CompanyProfile, item: NewsItem) -> str:
+    """Which open debt the rate touches, and which share is unknown."""
+    industry = _INDUSTRY_RU.get(company.industry, company.industry)
+    opened: list[str] = []
+    missing: list[str] = []
+    if company.has_loan:
+        opened.append("кредит")
+    else:
+        missing.append("кредита")
+    if company.has_leasing:
+        opened.append("лизинг")
+    else:
+        missing.append("лизинга")
+    if len(opened) == 1:
+        open_clause = f"открыт {opened[0]}"
+        debt = "этого договора"
+    else:
+        open_clause = f"открыты {opened[0]} и {opened[1]}"
+        debt = "этих договоров"
+    absent = f", {missing[0]} в профиле нет" if len(opened) == 1 else ""
+    folded = f"{item.title} {item.summary}".casefold()
+    if "сохран" in folded or "не смягч" in folded or "не измен" in folded:
+        movement = (
+            "В материале ставку сохраняют, поэтому платежи по договору "
+            "дешевле не становятся."
+        )
+    elif any(mark in folded for mark in ("сниз", "смягч")):
+        movement = (
+            "Если ставка в материале снижается, дешевле может стать только "
+            "та часть, что привязана к ставке."
+        )
+    else:
+        movement = "Платежи по договору зависят от стоимости денег."
+    return (
+        f"У компании ({industry}) {open_clause}{absent}, "
+        f"поэтому новость о ставке касается {debt}. "
+        f"{movement} "
+        f"Доля плавающей ставки в данных не указана, поэтому не видно, "
+        f"какая часть графика пересчитается сразу, а какая останется прежней."
+    )
+
+
+def _fx_link(company: CompanyProfile) -> str:
+    """Foreign trade is known. Direction and contract currency are not."""
+    where = company.foreign_trade_countries.strip() or "страна в профиле не названа"
+    return (
+        f"В профиле есть внешнеэкономическая деятельность: {where}. "
+        f"Курс меняет стоимость закупок и расчёты по контрактам. "
+        f"Направление, импорт или экспорт, и валюта конкретных сделок "
+        f"в данных не указаны."
+    )
+
+
+def _profile_bridge(company: CompanyProfile, item: NewsItem) -> str:
+    """Link when the event is not an open loan, lease, or trade contract."""
+    industry = _INDUSTRY_RU.get(company.industry, company.industry)
+    products = _products(company)
+    if products == "не отмечены":
+        products_line = "Кредита, лизинга и других продуктов Альфы в профиле нет."
+    else:
+        products_line = f"В Альфе отмечено: {products}."
+    extra: list[str] = []
+    if company.staff_over_100:
+        extra.append("Штат больше 100 человек.")
+    if company.has_foreign_trade and company.foreign_trade_countries:
+        extra.append(f"Внешняя торговля: {company.foreign_trade_countries}.")
+    tail = " ".join(extra)
+    return " ".join(
+        part for part in (_factor_bridge(company, item, industry), products_line, tail) if part
+    )
+
+
+def _factor_bridge(company: CompanyProfile, item: NewsItem, industry: str) -> str:
+    factor = _leading_factor(item)
+    if factor is Factor.FUEL:
+        cost = "рейса" if company.industry == "transport" else "затрат"
+        return (
+            f"Компания в отрасли «{industry}». Новость про топливо относится к ней, "
+            f"потому что топливо входит в себестоимость {cost}. "
+            f"Доля топлива в расходах в профиле не указана, размер удара "
+            f"по затратам отсюда не посчитать."
+        )
+    if factor is Factor.LABOR:
+        if company.has_payroll or company.staff_over_100:
+            known = "в профиле есть крупный штат или зарплатный проект"
+        else:
+            known = "крупного штата и зарплатного проекта в профиле нет"
+        return (
+            f"Компания в отрасли «{industry}». Новость про кадры и оплату "
+            f"относится к ней: {known}. На сколько вырастет фонд, данные не говорят."
+        )
+    if factor is Factor.DEMAND:
+        return (
+            f"Компания в отрасли «{industry}». Новость про спрос бьёт по выручке: "
+            f"меньше заказов — меньше поступлений. Долю выручки, которая зависит "
+            f"от этого спроса, профиль не содержит."
+        )
+    if factor is Factor.BUDGET:
+        return (
+            f"Компания в отрасли «{industry}». Новость про бюджет и контракты "
+            f"может касаться заказов компании. Участие в закупках профиль не подтверждает."
+        )
+    if factor is Factor.RATE:
+        return (
+            f"Компания в отрасли «{industry}». Кредита и лизинга в профиле нет, "
+            f"поэтому ставка не пересчитывает открытый договор. Она может дойти "
+            f"через закупки и спрос, но этих сумм в данных нет."
+        )
+    if factor is Factor.FX:
+        return (
+            f"Компания в отрасли «{industry}». Внешнеэкономической деятельности "
+            f"в профиле нет, поэтому курс не привязан к её контрактам напрямую."
+        )
+    return (
+        f"Компания в отрасли «{industry}». Связь с событием идёт через профиль, "
+        f"а не через отдельный открытый договор."
+    )
 
 
 def _company_link(company: CompanyProfile) -> str:

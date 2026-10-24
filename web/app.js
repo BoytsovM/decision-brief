@@ -10,7 +10,7 @@ const screens = {
 
 function initialMode() {
   const requested = new URLSearchParams(window.location.search).get("mode");
-  return requested === "live" ? "live" : "demo";
+  return requested === "demo" ? "demo" : "live";
 }
 
 const state = {
@@ -41,6 +41,11 @@ const state = {
   cardAnswers: {},
   cardModelPending: "",
   cardAnswerPending: "",
+  ownDraft: {},
+  ownAsked: {},
+  ownAnswers: {},
+  ownNotes: {},
+  ownPending: "",
   replyQuestion: "",
   askOpen: false,
   managerNote: "",
@@ -466,20 +471,36 @@ function effectsBlock(card, item) {
     ${gapLine(card, model.gaps)}`);
 }
 
-function modelParagraphs(text) {
-  const parts = String(text || "").split(/(?<=\.)\s+/).filter(Boolean);
-  if (!parts.length) {
-    return `<p class="body"></p>`;
+function flowingText(text, empty) {
+  const value = String(text || "").replace(/\s*\n+\s*/g, " ").replace(/[ \t]{2,}/g, " ").trim();
+  if (!value) {
+    return empty ? `<p class="body">${esc(empty)}</p>` : "";
   }
-  return parts.map((line) => `<p class="body">${esc(line)}</p>`).join("");
+  return `<p class="body">${esc(value)}</p>`;
+}
+
+function modelParagraphs(text) {
+  return flowingText(text, "");
+}
+
+function prose(text) {
+  return flowingText(text, "");
+}
+
+function externalMaterial(url) {
+  const value = String(url || "");
+  return /^https?:\/\//i.test(value) && !/example\.invalid/i.test(value);
+}
+
+function materialControl(item) {
+  if (externalMaterial(item.source_url)) {
+    return `<a class="text-btn" href="${esc(item.source_url)}" target="_blank" rel="noopener noreferrer">открыть материал</a>`;
+  }
+  return `<button class="text-btn" type="button" data-go="source" data-item="${esc(item.id)}">открыть материал</button>`;
 }
 
 function bankParagraphs(text) {
-  const parts = String(text || "").split(/(?<=\.)\s+/).filter(Boolean);
-  if (!parts.length) {
-    return `<p class="body">Свежей позиции банка по этой теме нет.</p>`;
-  }
-  return parts.map((line) => `<p class="body">${esc(line)}</p>`).join("");
+  return flowingText(text, "Свежей позиции банка по этой теме нет.");
 }
 
 function renderCard() {
@@ -506,22 +527,19 @@ function renderCard() {
           </div>
           <h1 class="h1">${esc(displayTitle(item))}</h1>
           ${block("ink", "01", "ФАКТ", esc(item.source_name), `
-            <div class="claim">${origin("fact")}<p class="body">${esc(card.happened)}</p></div>`)}
+            <div class="claim">${origin("fact")}<div class="stack">${prose(card.happened)}</div></div>`)}
           ${block("mid", "02", "СВЯЗЬ С КОМПАНИЕЙ", "Профиль компании", `
-            <div class="claim">${origin("fact")}<p class="body">${esc(card.why || "Для этого события ранжирование не назвало отдельную причину.")}</p></div>`)}
+            <div class="claim">${origin("fact")}<div class="stack">${prose(card.why || "Для этого события ранжирование не назвало отдельную причину.")}</div></div>`)}
           ${effectsBlock(card, item)}
           ${block("bank", "04", "ПОЗИЦИЯ БАНКА", "Материал банка", `
             <div class="claim">${origin("bank")}<div class="stack">${bankParagraphs(card.bank)}</div></div>`)}
           ${block("ai", "05", "ВЫВОД МОДЕЛИ", modelAside, `
             <div class="claim">${origin("ai")}<div class="stack">${modelParagraphs(modelText)}</div></div>
-            ${modelQuestionBar(item)}`)}
+            ${modelQuestionBar(item)}
+            ${ownQuestionForm(item)}`)}
           ${block("ink", "06", "ПЕРЕХОД К ИСТОЧНИКУ", "Основания вывода", `
-            <p class="body">${esc(item.source_name)} · <a class="text-btn" href="${esc(item.source_url)}" target="_blank" rel="noopener noreferrer">открыть материал</a> · <button class="text-btn" type="button" data-go="source" data-item="${esc(item.id)}">карточка источника</button></p>
+            <p class="body">${esc(item.source_name)} · ${materialControl(item)} · <button class="text-btn" type="button" data-go="source" data-item="${esc(item.id)}">карточка источника</button></p>
             ${card.signs ? `<p class="body">${esc(card.signs)}</p>` : ""}`)}
-          <form class="composer" data-ask="1">
-            <input name="q" type="text" placeholder="Задайте вопрос по событию" value="${esc(state.asked)}">
-            <button class="btn" type="submit">Спросить</button>
-          </form>
         </article>
         <aside class="rail ${state.askOpen ? "is-ask" : ""}">
           ${state.askOpen ? clarifyPanel() : cardRail(item)}
@@ -721,13 +739,12 @@ function renderSource() {
             <span class="caption">${esc(item.published)}</span>
           </div>
           <div class="sheet">
-            <p class="caption">${esc(item.source_url)}</p>
-            <div class="highlight">
-              <strong>Текст, который прочитал парсер:</strong>
-              <p class="body">${esc(item.summary || item.title)}</p>
-            </div>
+            <h3 class="h3">${esc(item.title)}</h3>
+            <div class="stack">${prose(item.summary || item.title)}</div>
           </div>
-          <p class="caption" style="max-width:700px"><a href="${esc(item.source_url)}" target="_blank" rel="noopener noreferrer">Открыть первоисточник</a>.</p>
+          ${externalMaterial(item.source_url)
+            ? `<p class="caption" style="max-width:700px"><a href="${esc(item.source_url)}" target="_blank" rel="noopener noreferrer">Открыть страницу источника</a>.</p>`
+            : `<p class="body">Внешней страницы у этого материала нет. Выше текст, который сервис прочитал и использовал в карточке.</p>`}
         </article>
       </div>
     </main>`;
@@ -811,6 +828,19 @@ function paint() {
       go("feed");
     });
   }
+  root.querySelectorAll("[data-own]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const item = selected();
+      const field = form.querySelector("input");
+      const question = field ? field.value.trim() : "";
+      if (!item || !question || state.ownPending === item.id || state.ownAnswers[item.id]) {
+        return;
+      }
+      state.ownDraft[item.id] = "";
+      askOwn(item.id, question);
+    });
+  });
   const reply = root.querySelector("[data-reply]");
   if (reply) {
     reply.addEventListener("click", () => {
@@ -860,6 +890,81 @@ function displayTitle(item) {
   return state.cardTitles[item.id] || item.headline || item.title;
 }
 
+function ownQuestionForm(item) {
+  if (!item || !state.cardAnswers[item.id]) {
+    return "";
+  }
+  const answer = state.ownAnswers[item.id] || "";
+  if (answer) {
+    const asked = state.ownAsked[item.id] || "";
+    const bar = asked
+      ? `<div class="ask-inline"><p>Вопрос: ${esc(asked)}</p></div>`
+      : "";
+    const note = state.ownNotes[item.id]
+      ? `<p class="own-reject">${esc(state.ownNotes[item.id])}</p>`
+      : "";
+    return `${bar}<div class="claim">${origin("ai")}<div class="stack">${modelParagraphs(answer)}</div></div>${note}`;
+  }
+  const pending = state.ownPending === item.id;
+  const field = pending
+    ? `<p class="caption">Модель отвечает на ваш вопрос.</p>`
+    : `<form class="composer own-ask" data-own="1">
+        <input name="followup" type="text" maxlength="240" autocomplete="off" placeholder="Хотите задать свой вопрос?" value="">
+        <button class="btn btn-secondary" type="submit">Спросить</button>
+      </form>`;
+  const note = state.ownNotes[item.id]
+    ? `<p class="own-reject">${esc(state.ownNotes[item.id])}</p>`
+    : "";
+  return `${field}${note}`;
+}
+
+function askOwn(itemId, question) {
+  state.ownAsked[itemId] = question;
+  state.ownPending = itemId;
+  state.ownNotes[itemId] = "";
+  state.askOpen = false;
+  paint();
+  fetch("/api/card-answer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      mode: state.mode,
+      company: state.companyId,
+      role: state.roleId,
+      item: itemId,
+      question,
+      own: true,
+    }),
+  })
+    .then(async (response) => {
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Вызов модели не выполнен.");
+      }
+      return payload;
+    })
+    .then((payload) => {
+      if (payload.status === "rejected" || payload.status === "unavailable" || payload.status === "failed" || payload.status === "empty") {
+        state.ownNotes[itemId] = payload.error || "Модель не ответила на вопрос.";
+        return;
+      }
+      state.ownAnswers[itemId] = payload.answer || payload.error || "Модель не ответила на вопрос.";
+      state.ownNotes[itemId] = "";
+    })
+    .catch((error) => {
+      state.ownNotes[itemId] = error instanceof Error ? error.message : "Вызов модели не выполнен.";
+    })
+    .finally(() => {
+      if (state.ownPending === itemId) {
+        state.ownPending = "";
+      }
+      const current = selected();
+      if (current && current.id === itemId && state.screen === "card") {
+        paint();
+      }
+    });
+}
+
 function modelQuestionBar(item) {
   const stored = item && state.cardQuestions[item.id] ? state.cardQuestions[item.id] : "";
   const question = stored.replace(/^вопрос:\s*/i, "").replace(/\.$/, "");
@@ -876,7 +981,10 @@ function modelQuestionBar(item) {
     }
     return "";
   }
-  return `<div class="ask-inline"><p>Вопрос: ${esc(question)}</p><button class="btn btn-secondary" type="button" data-reply="${esc(question)}">Ответить</button></div>${reply}`;
+  const button = answer
+    ? ""
+    : `<button class="btn btn-secondary" type="button" data-reply="${esc(question)}">Ответить</button>`;
+  return `<div class="ask-inline"><p>Вопрос: ${esc(question)}</p>${button}</div>${reply}`;
 }
 
 function askModel(itemId, question) {
