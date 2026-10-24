@@ -428,6 +428,20 @@ select.company {
   border-radius: 16px;
 }
 
+.payments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.payments-list > p {
+  flex-shrink: 0;
+}
+
 .widget {
   display: flex;
   flex-direction: column;

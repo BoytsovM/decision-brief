@@ -266,7 +266,9 @@ function renderHome() {
           </div>
           <section class="payments">
             <h2 class="h3">Последние платежи</h2>
-            ${paymentLines(company)}
+            <div class="payments-list" role="region" aria-label="Последние платежи" tabindex="0">
+              ${paymentLines(company)}
+            </div>
           </section>
         </section>
         <aside class="widget">
