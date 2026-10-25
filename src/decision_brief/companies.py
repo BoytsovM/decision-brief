@@ -7,6 +7,7 @@ revenue sum are separate tests.
 from __future__ import annotations
 
 import csv
+import math
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -43,7 +44,7 @@ def is_demo_candidate(company: CompanyProfile) -> bool:
     """Keep companies that themselves clear the case revenue threshold."""
     if company.revenue_rub is None:
         return False
-    return company.revenue_rub >= _LARGE_REVENUE_RUB
+    return bool(company.synthetic_u and company.revenue_rub > _LARGE_REVENUE_RUB)
 
 
 def in_demo_set(company: CompanyProfile) -> bool:
@@ -85,7 +86,7 @@ def summarize_groups(csv_path: Path) -> list[GroupSummary]:
             group_id=group_id,
             revenue_rub=totals[group_id],
             legal_entity_count=counts[group_id],
-            passes_large_revenue=totals[group_id] >= _LARGE_REVENUE_RUB,
+            passes_large_revenue=totals[group_id] > _LARGE_REVENUE_RUB,
         )
         for group_id in totals
     ]
@@ -113,6 +114,12 @@ def _row_to_profile(row: dict[str, str]) -> CompanyProfile:
         foreign_owner="иностран" in (row.get("OKFS_NAME") or "").casefold(),
         staff_over_100=any(token in staff for token in ("101", "251", "500")),
         rapid_growth="стремительн" in eco,
+        missing_fields=tuple(name for name in (
+            "MAINOKVED_CODE", "REVENUE_COMPANY", "CL_PRODUCT_LOA_MARK",
+            "CL_PRODUCT_LEA_MARK", "CL_PRODUCT_DEP_MARK", "FTS_FLAG",
+            "AMOUNT_WORKERS_FNS_GRADATION",
+        ) if not (row.get(name) or "").strip()),
+        region=(row.get("REGION") or "").strip(),
     )
 
 
@@ -125,6 +132,7 @@ def _float_or_none(raw: str | None) -> float | None:
     if not cleaned:
         return None
     try:
-        return float(cleaned)
+        value = float(cleaned)
+        return value if math.isfinite(value) and value >= 0 else None
     except ValueError:
         return None

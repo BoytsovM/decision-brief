@@ -34,7 +34,7 @@ class OkvedNormalizationTest(unittest.TestCase):
 
 
 class DemoRevenueTest(unittest.TestCase):
-    def test_own_revenue_of_15_billion_is_the_company_gate(self) -> None:
+    def test_revenue_must_exceed_15_billion_as_required_by_case(self) -> None:
         below = CompanyProfile(
             synthetic_u="U_small",
             industry="services",
@@ -46,8 +46,10 @@ class DemoRevenueTest(unittest.TestCase):
             revenue_rub=_THRESHOLD_RUB,
         )
         self.assertFalse(is_demo_candidate(below))
-        self.assertTrue(is_demo_candidate(exact))
-        self.assertEqual(select_demo_companies([below, exact]), [exact])
+        above = CompanyProfile(synthetic_u="U_above", industry="services", revenue_rub=_THRESHOLD_RUB + 1)
+        self.assertFalse(is_demo_candidate(exact))
+        self.assertTrue(is_demo_candidate(above))
+        self.assertEqual(select_demo_companies([below, exact, above]), [above])
 
     def test_repeated_synthetic_id_stays_out_of_the_demo_set(self) -> None:
         repeated = CompanyProfile(

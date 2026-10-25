@@ -6,7 +6,12 @@ import unittest
 from datetime import date
 from pathlib import Path
 
-from decision_brief.classify import factors_in_text, grade_text, mark_industry
+from decision_brief.classify import (
+    factors_in_text,
+    grade_text,
+    mark_industry,
+    payment_ruble,
+)
 from decision_brief.feeds import FEED_URLS, decode_rss, dedupe_by_link, load_feeds, parse_rss
 from decision_brief.models import CompanyProfile, Factor, NewsItem
 from decision_brief.scoring import score_item
@@ -92,6 +97,7 @@ class GradeScaleTest(unittest.TestCase):
         self.assertFalse(not_it.mentions_industry)
         it_sector = grade_text("IT-отрасль ждёт кадры", "", industry="it")
         self.assertTrue(it_sector.mentions_industry)
+        self.assertFalse(grade_text("Обзор экономики", "", industry="infrastructure").mentions_industry)
 
     def test_industry_flag_reaches_the_existing_score(self) -> None:
         company = CompanyProfile(synthetic_u="t", industry="transport")
@@ -165,6 +171,24 @@ class FeedLoaderTest(unittest.TestCase):
         self.assertEqual(seen, list(FEED_URLS))
         self.assertEqual(len(items), 5)
         self.assertTrue(all(item.factors.get(Factor.FX) == 3 for item in items))
+
+    def test_digital_ruble_is_not_a_currency_factor(self) -> None:
+        graded = grade_text(
+            "Бизнес назвал препятствия для внедрения цифрового рубля",
+            "Закон о цифровом рубле. Сумма 1 трлн рублей в обороте.",
+        )
+        self.assertEqual(graded.factors.get(Factor.FX, 0), 0)
+        self.assertFalse(payment_ruble("курс рубля"))
+        self.assertEqual(
+            factors_in_text("Курс рубля обновил минимум")[Factor.FX],
+            3,
+        )
+        mortgage = grade_text(
+            "ЦБ уточнил расчеты ставки по семейной ипотеке",
+            "Потолок по семейной ипотеке.",
+        )
+        self.assertEqual(mortgage.factors.get(Factor.RATE), 3)
+        self.assertEqual(mortgage.factors.get(Factor.FX, 0), 0)
 
 
 def _item(link: str, title: str) -> str:

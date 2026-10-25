@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import ssl
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -21,7 +20,7 @@ FEED_URLS: tuple[str, ...] = (
     "https://www.interfax.ru/rss",
     "https://www.cbr.ru/rss/eventrss",
     "https://www.vedomosti.ru/rss/rubric/finance/banks",
-    "http://www.cbr.ru/rss/RssPress",
+    "https://www.cbr.ru/rss/RssPress",
     "https://www.cbr.ru/rss/RssCurrency",
 )
 
@@ -49,6 +48,8 @@ def parse_rss(xml_text: str, source_name: str) -> list[NewsItem]:
             continue
         summary = _text(node, "description")
         published = _published_on(_text(node, "pubDate"))
+        if published is None or urlparse(link).scheme not in {"http", "https"}:
+            continue
         body = f"{title}. {summary}".strip()
         items.append(
             NewsItem(
@@ -70,24 +71,26 @@ def _text(node: ET.Element, tag: str) -> str:
     return child.text.strip()
 
 
-def _published_on(raw: str) -> date:
+def _published_on(raw: str) -> date | None:
     if not raw:
-        return date.today()
+        return None
     try:
         parsed: datetime = parsedate_to_datetime(raw)
     except (TypeError, ValueError):
-        return date.today()
+        return None
     return parsed.date()
 
 
-def fetch_rss(url: str, timeout: float = 30.0) -> str:
+def fetch_rss(url: str, timeout: float = 8.0) -> str:
     """Download one feed as text. This is the only network call."""
     request = urllib.request.Request(
         url,
         headers={"User-Agent": "decision-brief/0.1"},
     )
     with _open_url(request, timeout) as response:
-        raw = response.read()
+        raw = response.read(2_000_001)
+        if len(raw) > 2_000_000:
+            raise ValueError("RSS exceeds the 2 MB limit")
         charset = response.headers.get_content_charset()
     return decode_rss(raw, charset)
 
@@ -161,13 +164,5 @@ def _source_name(url: str) -> str:
 
 
 def _open_url(request: urllib.request.Request, timeout: float):
-    """Open ``request``, and retry CBR once if the local trust store fails."""
-    try:
-        return urllib.request.urlopen(request, timeout=timeout)
-    except urllib.error.URLError as exc:
-        if not isinstance(getattr(exc, "reason", None), ssl.SSLError):
-            raise
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        return urllib.request.urlopen(request, timeout=timeout, context=context)
+    """Keep certificate and hostname verification enabled for every source."""
+    return urllib.request.urlopen(request, timeout=timeout)

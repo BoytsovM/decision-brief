@@ -60,6 +60,8 @@ def score_item(
     divided by 3 so one factor cannot exceed 1.
     """
     age_days = (as_of - item.published_on).days
+    if age_days < 0:
+        return 0.0, ("Дата публикации в будущем; событие требует проверки.",)
     if age_days > _STALE_AFTER_DAYS:
         return 0.0, ("Материал старше года, в ленту не берём.",)
     company_exposure = exposure(company)

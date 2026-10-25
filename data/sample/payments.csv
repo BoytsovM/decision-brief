@@ -1,0 +1,5 @@
+PAYER;BENEFICIARY;PAY_AMT;PAY_CNT
+U_sample_transport;U_sample_housing;120000000;12
+U_sample_horeca;U_sample_transport;30000000;20
+U_sample_transport;U_unknown_demo;50000000;10
+U_sample_housing;U_sample_small;10000000;4

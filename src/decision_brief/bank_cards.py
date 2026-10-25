@@ -1,11 +1,11 @@
 """Short Alfa-Bank notes. Full PDF text is not stored here.
 
-Quotations keep an empty page when the PDF page was not recorded.
+Paraphrases carry visually verified page references; original PDFs stay external.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 
 from decision_brief.models import BankCard, BankThesis, Factor, NewsItem
@@ -45,7 +45,7 @@ BANK_CARDS: tuple[BankCard, ...] = (
         theses=(
             BankThesis(
                 text=(
-                    "Ставка: 14,0%, пауза 23 октября, "
+                    "Ставка: 14,0%. Банк ожидает паузу 23 октября, "
                     "14,0% на конец 2026 и 12,0% на конец 2027."
                 ),
                 factor=Factor.RATE,
@@ -65,7 +65,7 @@ BANK_CARDS: tuple[BankCard, ...] = (
         title="Макростатистика 7 месяцев 2026",
         published_on=date(2026, 9, 7),
         filename="ALFA-7M26.pdf",
-        summary="Рынок труда жёсткий, зарплаты растут быстрее ожиданий.",
+        summary="Данные рынка труда не подтверждают охлаждения экономики; рост зарплат остаётся высоким.",
         factors=(Factor.LABOR,),
         theses=(
             BankThesis(
@@ -83,7 +83,7 @@ BANK_CARDS: tuple[BankCard, ...] = (
         factors=(Factor.DEMAND,),
         theses=(
             BankThesis(
-                text="Потребление в 4 квартале 2026 около нуля.",
+                text="Прогноз роста потребления в 4 квартале 2026 около нуля.",
                 factor=Factor.DEMAND,
             ),
         ),
@@ -167,6 +167,27 @@ BANK_CARDS: tuple[BankCard, ...] = (
         ),
     ),
 )
+
+# Verified against the case's public source folder on 2026-10-22.
+# K6 is historical and intentionally excluded. K9's exact publication day is unknown.
+_PROVENANCE = {
+    "K1": ("1", "19iW3Ph8_wO0HHQY7Ik4lTfC3jRc9gjWV"),
+    "K2": ("1-2", "1shHG89LtMgHT1_uEebHmQSFZe_zbeq7-"),
+    "K3": ("1", "1HZDq3WGRFdzgm1TZ5hWL23Q3I9c2Eq64"),
+    "K4": ("1", "1riR1lhsb6EY1MwGMxdBlS_tI5ed9mIiz"),
+    "K5": ("1", "1khcHwoS0FkG9p_0J4XoHGaGq3B4V0ime"),
+    "K6": ("", "1yLCBrIoyIsubLTEBvBHh6io48ysnW-wn"),
+    "K7": ("10", "1hq3Fhyz9ce_sRyGUQB1MdoHeQdfAJfhK"),
+    "K8": ("1", "1bPzix_332N2CyMY0tqCHuYtGsfJWnFGv"),
+    "K9": ("2-3", "1a7TXOCHARfKzUR0hn9Cm9gQSrIldxTDE"),
+}
+
+
+BANK_CARDS = tuple(replace(card, page=_PROVENANCE[card.card_id][0],
+    source_url=f"https://drive.google.com/file/d/{_PROVENANCE[card.card_id][1]}/view",
+    source_note=("Отчёт за август 2026; точный день публикации не подтверждён. "
+                 "Дата индекса 07.09.2026 сохранена из исходной версии."
+                 if card.card_id == "K9" else "")) for card in BANK_CARDS)
 
 _FACTOR_LABEL: dict[Factor, str] = {
     Factor.RATE: "ставка",
@@ -260,7 +281,7 @@ def format_citation(cited: CitedThesis) -> str:
     label = _FACTOR_LABEL[cited.factor]
     return (
         f"{cited.card_id}, {cited.filename}, {published}, "
-        f"{label}, {freshness}, {page}: «{cited.text}»"
+        f"{label}, {freshness}, {page}; пересказ: {cited.text}"
     )
 
 

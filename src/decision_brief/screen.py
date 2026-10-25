@@ -32,6 +32,7 @@ from decision_brief.roles import (
     Role,
     company_consequence,
     rank_for_role,
+    score_every_item,
 )
 
 # Nominative labels for the selector. Consequence sentences use another case.
@@ -165,7 +166,7 @@ def companies_source_label(path: Path) -> str:
 
 
 def load_demo_companies(path: Path) -> list[CompanyProfile]:
-    """Chat-1 demo set: a company's own revenue is at least 15 billion rubles.
+    """Chat-1 demo set: a company's own revenue is above 15 billion rubles.
 
     ``load_companies`` is unchanged. ``U_428697`` stays out via ``select_demo_companies``.
     """
@@ -270,6 +271,22 @@ def rank_feed(
     """
     marked = [mark_industry(item, company.industry) for item in items]
     return rank_for_role(company, marked, role, as_of=as_of)
+
+
+def parsed_feed(
+    company: CompanyProfile,
+    items: Sequence[NewsItem],
+    role: Role,
+    *,
+    as_of: date,
+) -> list[ScoredItem]:
+    """Score every parsed item for the scrollable screen feed.
+
+    Items below the show threshold stay in the list. ``rank_feed`` still
+    drops them for ranking that must hide the tail.
+    """
+    marked = [mark_industry(item, company.industry) for item in items]
+    return score_every_item(company, marked, role, as_of=as_of)
 
 
 def csv_fields_raising_score(

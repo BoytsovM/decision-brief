@@ -20,6 +20,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from decision_brief.bank_cards import latest_card_for
+from decision_brief.classify import household_mortgage, payment_ruble
 from decision_brief.counterparties import CounterpartyShare
 from decision_brief.models import (
     BankCard,
@@ -53,7 +54,7 @@ class Role(Enum):
 
 ROLE_LABEL_RU: dict[Role, str] = {
     Role.TREASURER: "казначей",
-    Role.CHIEF_ACCOUNTANT: "главбух",
+    Role.CHIEF_ACCOUNTANT: "главный бухгалтер",
     Role.OWNER: "собственник",
 }
 
@@ -290,6 +291,17 @@ def company_consequence(company: CompanyProfile, item: NewsItem) -> str:
     matter. Two industries do not share one stock sentence.
     """
     industry = _INDUSTRY_RU.get(company.industry, company.industry)
+    story = f"{item.title} {item.summary}"
+    if payment_ruble(story):
+        return (
+            f"Для {industry} новость про цифровой рубль не меняет курс расчётов "
+            "и не пересчитывает открытые договоры."
+        )
+    if household_mortgage(item.title):
+        return (
+            f"Для {industry} это правило семейной ипотеки физических лиц. "
+            "Кредит и лизинг компании оно не пересчитывает."
+        )
     parts: list[str] = []
     for factor in Factor:
         if item.factors.get(factor, 0) <= 0:
@@ -324,6 +336,44 @@ def score_for_role(
     return adjusted, reasons + extra
 
 
+def score_every_item(
+    company: CompanyProfile,
+    items: list[NewsItem],
+    role: Role,
+    *,
+    as_of: date,
+    counterparties: Sequence[CounterpartyShare] = (),
+) -> list[ScoredItem]:
+    """Score every parsed item, including those below the show threshold.
+
+    Order is the multiplied score, highest first. From 0.6 the item is
+    important, from 0.3 it is a notice, and below that it stays in the
+    list with ``Relevance.HIDDEN``. A material older than a year stays
+    at 0. The attached bank card is the newest fresh card for the
+    strongest factor.
+    """
+    scored: list[ScoredItem] = []
+    for item in items:
+        value, reasons = score_for_role(
+            company,
+            item,
+            role,
+            as_of=as_of,
+            counterparties=counterparties,
+        )
+        scored.append(
+            ScoredItem(
+                item=item,
+                score=value,
+                relevance=relevance_for(value),
+                reasons=reasons,
+                bank_card=_bank_card_for(item),
+            )
+        )
+    scored.sort(key=lambda row: row.score, reverse=True)
+    return scored
+
+
 def rank_for_role(
     company: CompanyProfile,
     items: list[NewsItem],
@@ -338,29 +388,14 @@ def rank_for_role(
     from 0.3 it is a notice, and below that it is hidden. The attached
     bank card is the newest fresh card for the strongest factor.
     """
-    scored: list[ScoredItem] = []
-    for item in items:
-        value, reasons = score_for_role(
-            company,
-            item,
-            role,
-            as_of=as_of,
-            counterparties=counterparties,
-        )
-        label = relevance_for(value)
-        if label is Relevance.HIDDEN:
-            continue
-        scored.append(
-            ScoredItem(
-                item=item,
-                score=value,
-                relevance=label,
-                reasons=reasons,
-                bank_card=_bank_card_for(item),
-            )
-        )
-    scored.sort(key=lambda row: row.score, reverse=True)
-    return scored
+    scored = score_every_item(
+        company,
+        items,
+        role,
+        as_of=as_of,
+        counterparties=counterparties,
+    )
+    return [row for row in scored if row.relevance is not Relevance.HIDDEN]
 
 
 def _workbook_candidates() -> tuple[Path, ...]:
@@ -379,6 +414,8 @@ def _workbook_candidates() -> tuple[Path, ...]:
 
 def _bank_card_for(item: NewsItem) -> BankCard | None:
     """Newest fresh card for the strongest factor, as in the company feed."""
+    if payment_ruble(f"{item.title} {item.summary}"):
+        return None
     if not item.factors:
         return None
     top = max(item.factors, key=lambda factor: item.factors[factor])
@@ -426,7 +463,7 @@ def _rate_line(company: CompanyProfile, industry: str) -> str:
         )
     if company.rapid_growth:
         return (
-            f"Для {industry} ставка бьёт по фондированию: "
+            f"Для {industry} ставка меняет стоимость новых заимствований: "
             "в профиле отмечен стремительный рост, а кредита и лизинга нет."
         )
     return (

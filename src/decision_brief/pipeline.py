@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 from decision_brief.bank_cards import latest_card_for, position_text
+from decision_brief.classify import payment_ruble
 from decision_brief.models import (
     CompanyProfile,
     Factor,
@@ -85,6 +86,8 @@ def _fresh_bank_text(scored: ScoredItem) -> str:
 
 
 def _bank_card_for(item: NewsItem):
+    if payment_ruble(f"{item.title} {item.summary}"):
+        return None
     if not item.factors:
         return None
     top = max(item.factors, key=item.factors.get)

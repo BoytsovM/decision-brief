@@ -20,7 +20,7 @@ from decision_brief.pipeline import explain, rank_for_company
 
 _AS_OF = date(2026, 10, 21)
 _RATE_TEXT = (
-    "Ставка: 14,0%, пауза 23 октября, "
+    "Ставка: 14,0%. Банк ожидает паузу 23 октября, "
     "14,0% на конец 2026 и 12,0% на конец 2027."
 )
 
@@ -73,11 +73,11 @@ class BankCitationTest(unittest.TestCase):
         self.assertFalse(any(row.fresh for row in cited_theses(steel)))
         self.assertNotIn("K6", {row.card_id for row in current_citations()})
 
-    def test_ready_sentences_keep_their_source_and_an_empty_page(self) -> None:
+    def test_ready_sentences_keep_their_source_and_verified_pages(self) -> None:
         expected = {
             "K2": _RATE_TEXT,
             "K3": "Рынок труда жёсткий.",
-            "K4": "Потребление в 4 квартале 2026 около нуля.",
+            "K4": "Прогноз роста потребления в 4 квартале 2026 около нуля.",
             "K5": "ВВП 2026: +0,1%.",
             "K7": "67% кредитов юрлицам по плавающей ставке.",
         }
@@ -85,14 +85,15 @@ class BankCitationTest(unittest.TestCase):
             card = _card(card_id)
             texts = [row.text for row in cited_theses(card)]
             self.assertIn(sentence, texts)
-            self.assertEqual(card.page, "")
+            self.assertTrue(card.page)
+            self.assertTrue(card.source_url.startswith("https://drive.google.com/file/d/"))
             for row in cited_theses(card):
-                self.assertEqual(row.page, "")
+                self.assertEqual(row.page, card.page)
                 self.assertEqual(row.filename, card.filename)
                 self.assertEqual(row.published_on, card.published_on)
                 line = format_citation(row)
-                self.assertIn("стр.:", line)
-                self.assertNotRegex(line, r"стр\. \d")
+                self.assertIn(f"стр. {card.page}", line)
+                self.assertIn("пересказ:", line)
 
     def test_stale_rate_path_is_not_stored_on_any_thesis(self) -> None:
         blob = "\n".join(
@@ -106,10 +107,10 @@ class BankCitationTest(unittest.TestCase):
             ["67% кредитов юрлицам по плавающей ставке."],
         )
 
-    def test_every_card_is_missing_a_pdf_page(self) -> None:
+    def test_only_unused_historical_card_has_no_verified_page(self) -> None:
         self.assertEqual(
             cards_missing_page(),
-            ("K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8", "K9"),
+            ("K6",),
         )
 
     def test_explain_quotes_k2_and_keeps_the_news_source(self) -> None:

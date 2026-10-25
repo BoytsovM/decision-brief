@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"><channel>
+  <title>Синтетические события. Не реальные публикации.</title>
+  <item><title>Демо: ключевая ставка сохранена</title>
+    <link>https://example.invalid/demo/rate</link>
+    <pubDate>Tue, 20 Oct 2026 09:00:00 +0300</pubDate>
+    <description>Учебное событие: регулятор сохранил ключевую ставку. Условия кредитования пока не смягчаются.</description></item>
+  <item><title>Демо: спрос в общепите замедляется</title>
+    <link>https://example.invalid/demo/demand</link>
+    <pubDate>Tue, 20 Oct 2026 10:00:00 +0300</pubDate>
+    <description>Вымышленное исследование: рестораны отмечают замедление потребления. Прогноз спроса остаётся неопределённым.</description></item>
+  <item><title>Демо: дизельное топливо дорожает для грузоперевозчиков</title>
+    <link>https://example.invalid/demo/fuel</link>
+    <pubDate>Tue, 20 Oct 2026 11:00:00 +0300</pubDate>
+    <description>Учебное событие: транспортные компании обсуждают пересмотр тарифов из-за цен на топливо.</description></item>
+  <item><title>Демо: зарплаты растут на фоне нехватки кадров</title>
+    <link>https://example.invalid/demo/labor</link>
+    <pubDate>Tue, 20 Oct 2026 12:00:00 +0300</pubDate>
+    <description>Синтетический опрос работодателей: расширение штата затруднено, расходы на персонал увеличиваются.</description></item>
+  <item><title>Демо: курс юаня меняется</title>
+    <link>https://example.invalid/demo/fx</link>
+    <pubDate>Tue, 20 Oct 2026 13:00:00 +0300</pubDate>
+    <description>Учебный валютный сценарий для компаний с внешнеэкономической деятельностью. Направление импорта и экспорта в профиле неизвестно.</description></item>
+  <item><title>Демо: бюджетные госзаказы на строительство расширяются</title>
+    <link>https://example.invalid/demo/budget</link>
+    <pubDate>Tue, 20 Oct 2026 14:00:00 +0300</pubDate>
+    <description>Вымышленный регион обсуждает новые строительные проекты. Участие выбранной компании в закупках не подтверждено.</description></item>
+</channel></rss>

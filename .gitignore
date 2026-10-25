@@ -221,3 +221,8 @@ __marimo__/
 
 # Local raw source documents
 data/raw/
+
+# Local credentials and export artifacts
+.env.*
+!.env.example
+release/
