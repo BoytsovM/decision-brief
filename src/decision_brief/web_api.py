@@ -17,6 +17,7 @@ from pathlib import Path
 
 from decision_brief.agent import AgentResult
 from decision_brief.bank_cards import cited_theses
+from decision_brief.classify import household_mortgage, payment_ruble
 from decision_brief.models import CompanyProfile, Factor, NewsItem, Relevance, ScoredItem
 from decision_brief.roles import ROLE_LABEL_RU, Role, company_consequence
 from decision_brief.screen import (
@@ -446,6 +447,9 @@ def rate_horizon_present(scored: ScoredItem) -> bool:
 
 def _horizon_rows(scored: ScoredItem) -> list[dict[str, str]]:
     """The forecast still ahead. Not a task and not a second bank block."""
+    story = f"{scored.item.title} {scored.item.summary}"
+    if payment_ruble(story):
+        return []
     for text in _thesis_texts(scored):
         found = re.search(
             r"(\d[\d,]*% на конец \d{4}) и (\d[\d,]*% на конец \d{4})",
@@ -453,10 +457,17 @@ def _horizon_rows(scored: ScoredItem) -> list[dict[str, str]]:
         )
         if found is None:
             continue
-        sentence = (
-            "Дальше платежи держит прогноз банка: "
-            f"{found.group(1)} и только {found.group(2)}."
-        )
+        if household_mortgage(scored.item.title):
+            sentence = (
+                "Потолок семейной ипотеки считается от ключевой ставки. "
+                "Прогноз банка по этой ставке: "
+                f"{found.group(1)} и {found.group(2)}."
+            )
+        else:
+            sentence = (
+                "Ориентиром для дальнейших платежей служит прогноз банка: "
+                f"{found.group(1)} и {found.group(2)}."
+            )
         return [{"kind": "fact", "text": sentence}]
     return []
 
@@ -598,6 +609,19 @@ def _short_fact_gloss(text: str) -> str:
 
 def _event_link(company: CompanyProfile, item: NewsItem) -> str:
     """How this event touches the open products. Not a company passport."""
+    story = f"{item.title} {item.summary}"
+    if payment_ruble(story):
+        return (
+            "Новость про цифровой рубль как платёжный инструмент. "
+            "Курс, страна торговли, кредит и лизинг компании "
+            "к этому событию не относятся."
+        )
+    if household_mortgage(item.title):
+        return (
+            "Новость про семейную ипотеку физических лиц: "
+            "потолок считается от ключевой ставки. "
+            "Кредит и лизинг компании к этому продукту не относятся."
+        )
     parts: list[str] = []
     if item.factors.get(Factor.RATE, 0) > 0 and (company.has_loan or company.has_leasing):
         parts.append(_rate_link(company, item))
@@ -628,10 +652,17 @@ def _rate_link(company: CompanyProfile, item: NewsItem) -> str:
         open_clause = f"открыты {opened[0]} и {opened[1]}"
         debt = "этих договоров"
     absent = f", {missing[0]} в профиле нет" if len(opened) == 1 else ""
-    folded = f"{item.title} {item.summary}".casefold()
-    if "сохран" in folded or "не смягч" in folded or "не измен" in folded:
+    story = f"{item.title} {item.summary}"
+    folded = story.casefold()
+    if _rate_hold_is_forecast(story):
         movement = (
-            "В материале ставку сохраняют, поэтому платежи по договору "
+            "Решение ещё не принято: в материале аналитики ждут, "
+            "что ставку сохранят, поэтому платежи по договору "
+            "от этой новости дешевле не становятся."
+        )
+    elif _rate_already_held(folded):
+        movement = (
+            "Ставку уже сохранили, поэтому платежи по договору "
             "дешевле не становятся."
         )
     elif any(mark in folded for mark in ("сниз", "смягч")):
@@ -744,6 +775,9 @@ def _company_link(company: CompanyProfile) -> str:
 
 def _reader_signs(company: CompanyProfile, item: NewsItem) -> str:
     """Human names of the profile facts that raised this item."""
+    story = f"{item.title} {item.summary}"
+    if payment_ruble(story) or household_mortgage(item.title):
+        return ""
     labels = [
         _SIGN_RU[name]
         for name in csv_fields_raising_score(company, item)
@@ -756,10 +790,15 @@ def _reader_signs(company: CompanyProfile, item: NewsItem) -> str:
 
 def _bank_for_reader(scored: ScoredItem) -> str:
     """Bank title, date, and theses. File names and page numbers stay out."""
+    story = f"{scored.item.title} {scored.item.summary}"
+    if payment_ruble(story):
+        return "Свежей позиции банка по этой теме нет."
     card = scored.bank_card
     if card is None or not card.fresh:
         return "Свежей позиции банка по этой теме нет."
     rows = list(cited_theses(card))
+    if household_mortgage(scored.item.title):
+        rows = [row for row in rows if row.factor is Factor.RATE]
     top = _leading_factor(scored.item)
     if top is not None:
         matched = [row for row in rows if row.factor is top]
@@ -774,10 +813,54 @@ def _bank_for_reader(scored: ScoredItem) -> str:
     return head + " " + " ".join(sentences)
 
 
+_RATE_LABEL = re.compile(r"^Ставка:\s*(\d[\d,]*)%\.$")
+_PAUSE_TAIL = re.compile(r"Банк ожидает паузу 23 октября,\s*(.+)$", re.IGNORECASE)
+
+
+def _rate_hold_is_forecast(text: str) -> bool:
+    """True when the article only expects the rate to stay, not that it did."""
+    folded = text.casefold()
+    if any(mark in folded for mark in ("оставил", "сохранил", "осталась", "не изменил")):
+        return False
+    expects = ("скорее всего", "ожида", "может ", "допуст", "прогнозир")
+    return "сохран" in folded and any(mark in folded for mark in expects)
+
+
+def _rate_already_held(folded: str) -> bool:
+    """True when the article reports a decision to keep the rate."""
+    held = ("оставил", "сохранил", "осталась", "не изменил", "не измен")
+    if any(mark in folded for mark in held):
+        return True
+    return "сохран" in folded or "не смягч" in folded
+
+
 def _dated_thesis(text: str, scored: ScoredItem) -> str:
-    """A forecast of 23 October is past once the news is on or after that day."""
-    if scored.item.published_on >= date(2026, 10, 23):
-        return text.replace("ожидает паузу 23 октября", "тогда ожидал паузу 23 октября")
+    """Separate a passed meeting from forecasts that are still ahead.
+
+    The card title already states the current rate, so a thesis that only
+    repeats that figure is left out.
+    """
+    title = scored.bank_card.title if scored.bank_card is not None else ""
+    title_rates = set(re.findall(r"\d[\d,]*%", title))
+    kept: list[str] = []
+    for sentence in _sentences(text):
+        label = _RATE_LABEL.match(sentence)
+        if label is not None and f"{label.group(1)}%" in title_rates:
+            continue
+        kept.append(sentence)
+    text = " ".join(kept)
+    found = _PAUSE_TAIL.search(text)
+    later = found.group(1).strip().rstrip(".") if found is not None else ""
+    passed = scored.item.published_on >= date(2026, 10, 23)
+    if later:
+        if passed:
+            return (
+                "Банк ожидал паузу 23 октября. "
+                f"Прогноз после этой даты остаётся: {later}."
+            )
+        return f"Банк ожидает паузу 23 октября. Прогноз после этой даты: {later}."
+    if passed:
+        return text.replace("ожидает паузу 23 октября", "ожидал паузу 23 октября")
     return text
 
 

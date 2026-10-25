@@ -24,7 +24,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse, urlsplit
 
 from decision_brief.agent import prepare_analysis
-from decision_brief.classify import factors_in_text
+from decision_brief.classify import factors_in_text, household_mortgage, payment_ruble
 from decision_brief.web_api import (
     _FACTOR_RU,
     _bank_for_reader,
@@ -527,14 +527,16 @@ def _page_context(company: CompanyProfile, scored: object) -> str:
         if weight and factor in _FACTOR_RU
     ]
     products: list[str] = []
-    if company.has_loan:
-        products.append("кредит")
-    if company.has_leasing:
-        products.append("лизинг")
-    if company.has_payroll:
-        products.append("зарплата")
-    if company.has_foreign_trade:
-        products.append(f"валюта {company.foreign_trade_countries}")
+    story = f"{item.title}\n{item.summary}"
+    if not payment_ruble(story) and not household_mortgage(story):
+        if company.has_loan:
+            products.append("кредит")
+        if company.has_leasing:
+            products.append("лизинг")
+        if company.has_payroll:
+            products.append("зарплата")
+        if company.has_foreign_trade:
+            products.append(f"валюта {company.foreign_trade_countries}")
     return " ".join((
         item.title,
         item.summary,

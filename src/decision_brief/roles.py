@@ -20,6 +20,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from decision_brief.bank_cards import latest_card_for
+from decision_brief.classify import household_mortgage, payment_ruble
 from decision_brief.counterparties import CounterpartyShare
 from decision_brief.models import (
     BankCard,
@@ -290,6 +291,17 @@ def company_consequence(company: CompanyProfile, item: NewsItem) -> str:
     matter. Two industries do not share one stock sentence.
     """
     industry = _INDUSTRY_RU.get(company.industry, company.industry)
+    story = f"{item.title} {item.summary}"
+    if payment_ruble(story):
+        return (
+            f"Для {industry} новость про цифровой рубль не меняет курс расчётов "
+            "и не пересчитывает открытые договоры."
+        )
+    if household_mortgage(item.title):
+        return (
+            f"Для {industry} это правило семейной ипотеки физических лиц. "
+            "Кредит и лизинг компании оно не пересчитывает."
+        )
     parts: list[str] = []
     for factor in Factor:
         if item.factors.get(factor, 0) <= 0:
@@ -402,6 +414,8 @@ def _workbook_candidates() -> tuple[Path, ...]:
 
 def _bank_card_for(item: NewsItem) -> BankCard | None:
     """Newest fresh card for the strongest factor, as in the company feed."""
+    if payment_ruble(f"{item.title} {item.summary}"):
+        return None
     if not item.factors:
         return None
     top = max(item.factors, key=lambda factor: item.factors[factor])
@@ -449,7 +463,7 @@ def _rate_line(company: CompanyProfile, industry: str) -> str:
         )
     if company.rapid_growth:
         return (
-            f"Для {industry} ставка бьёт по фондированию: "
+            f"Для {industry} ставка меняет стоимость новых заимствований: "
             "в профиле отмечен стремительный рост, а кредита и лизинга нет."
         )
     return (

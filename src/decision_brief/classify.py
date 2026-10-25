@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from decision_brief.models import Factor, NewsItem
@@ -19,12 +20,48 @@ _KEYWORDS: tuple[tuple[Factor, tuple[str, ...]], ...] = (
 )
 
 
+_DIGITAL_RUBLE = re.compile(r"цифров\w*\s+рубл\w*", re.IGNORECASE)
+_MONEY_RUBLE = re.compile(
+    r"\d[\d\s\u00a0,.]*\s*(?:млрд|млн|трлн|тыс\.?)?\s*рубл\w*",
+    re.IGNORECASE,
+)
+_HOUSEHOLD_MORTGAGE = re.compile(
+    r"семейн\w*\s+ипотек\w*|ипотек\w*\s+семейн\w*",
+    re.IGNORECASE,
+)
+
+
+def payment_ruble(text: str) -> bool:
+    """True when «рубль» names the digital payment instrument, not a rate."""
+    return _DIGITAL_RUBLE.search(text) is not None
+
+
+def household_mortgage(text: str) -> bool:
+    """True when the headline is about a household family mortgage.
+
+    A mention only in the body does not make the article that product.
+    Pass the headline, or a headline and a body separated by a newline.
+    """
+    headline = text.split("\n", 1)[0]
+    return _HOUSEHOLD_MORTGAGE.search(headline) is not None
+
+
+def _scan_text(text: str) -> str:
+    """Remove ruble phrases that are not an exchange rate.
+
+    A digital ruble and a sum in rubles must not become a currency factor.
+    «Курс рубля» stays, because the rate word is still in the text.
+    """
+    without_instrument = _DIGITAL_RUBLE.sub(" ", text)
+    return _MONEY_RUBLE.sub(" ", without_instrument)
+
+
 def factors_in_text(text: str) -> dict[Factor, int]:
     """Return factor strengths 0..3 found in a title or summary.
 
     A direct hit is strength 3. Several keyword groups can fire at once.
     """
-    folded = text.casefold()
+    folded = _scan_text(text).casefold()
     found: dict[Factor, int] = {}
     for factor, needles in _KEYWORDS:
         if any(needle in folded for needle in needles):
@@ -118,10 +155,10 @@ def mark_industry(item: NewsItem, industry: str) -> NewsItem:
 
 
 def _strength(title: str, summary: str, needles: tuple[str, ...]) -> int:
-    folded_title = title.casefold()
+    folded_title = _scan_text(title).casefold()
     if any(needle in folded_title for needle in needles):
         return 3
-    hits = sum(summary.casefold().count(needle) for needle in needles)
+    hits = sum(_scan_text(summary).casefold().count(needle) for needle in needles)
     if hits >= 2:
         return 2
     if hits == 1:

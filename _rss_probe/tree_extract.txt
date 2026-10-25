@@ -1,0 +1,241 @@
+FILE 0. Инструкция.docx
+FILE 1. Что нужно собрать с клиента_.docx
+FILE 2. Промт для генерации блоков ЛТ.docx
+FILE 6bb0ef8b27bd17cbfe38f7e0de5e7d90.docx
+FILE 7 сем (2).docx
+FILE 7 сем.docx
+FILE 8 сем (2).docx
+FILE 8 сем.docx
+FILE 8 семинар.docx
+FILE Efficient Production and Modern Automation (2).docx
+FILE Efficient Production and Modern Automation.docx
+FILE Great Britain.docx
+FILE Hobbies and Your future career .docx
+FILE Investor Roadmap.docx
+FILE InvestRisk_Roadmap_Final_Clean_v4 (2).docx
+FILE InvestRisk_Roadmap_Final_Clean_v4 (3).docx
+FILE InvestRisk_Roadmap_Final_Clean_v4.docx
+FILE IT lesson.docx
+FILE konspekt_маркетинг.docx
+FILE lab1.docx
+FILE Met_ukazania_Laba.docx
+FILE Project Solutions and Modern Production (2).docx
+FILE Project Solutions and Modern Production.docx
+FILE Russia (2).docx
+FILE Russia.docx
+FILE Scientific Achievements (2).docx
+FILE Scientific Achievements.docx
+FILE Seminar_Test_API_Бойцов.docx
+FILE Seminar_Test_API_Попов.docx
+FILE Seminar_Test_UI_1_Boytsov.docx
+FILE Seminar_Test_UI_2_Boytsov.docx
+FILE Sources of Information.docx
+FILE Types of Energy.docx
+FILE What is Stress and How to Deal with It.docx
+FILE Аналитика хакатона Альфа.docx
+FILE Анкета.DOCX
+FILE Без имени 1.docx
+FILE бизнес_клуб_план.docx
+FILE Вывод по API.docx
+FILE вычитание с доп кодом.docx
+FILE Документ (5).docx
+FILE Древо сценариев.docx
+FILE Захват_Территории_и_прокачка_гипотез.docx
+FILE Зачет Прога.docx
+FILE заявление на прием ИА.docx
+FILE Заявление по гос.службе ИА.docx
+FILE Заявление_на_новую_электронную_трудовую.docx
+FILE Заявление_на_перечисление_зарплаты_ИА.docx
+FILE Заявление_на_увольнение_версия_2026_1_1.docx
+FILE Заявление_о_допуске_к_конкурсному_отбору_09_03_01.docx
+FILE Заявление_о_переводе_на_ОП_ТОП_ИТпо_направлению_09_03_01.docx
+FILE ИнвестРиск_Нейросеть.docx
+FILE Информированное_согласие_МГТУ_СТАНКИН.docx
+FILE Кейсы для экономики.docx
+FILE Комментарий вопросов к зачету (2).docx
+FILE Комментарий вопросов к зачету (3).docx
+FILE Комментарий вопросов к зачету.docx
+FILE конспект.docx
+FILE Конфликты (2).docx
+FILE Конфликты.docx
+FILE Кругляцов_ЛР1_Вариант_5.docx
+FILE Кругляцов_ЛР2_База_собак_1.docx
+FILE Кругляцов_ЛР3_Вариант_6.docx
+FILE Кругляцов_ЛР4_Вариант_4.docx
+FILE Кругляцов_ЛР5_Общий_вариант.docx
+FILE Л4_Строки.docx
+FILE Лабараторная работа #1 Соболев.docx
+FILE Лабораторная работа 1.docx
+FILE Лабораторная_ПРОГРАММИРОВАНИЕ.docx
+FILE Линал.docx
+FILE Лист контроля БМ (2).docx
+FILE Лист контроля БМ.docx
+FILE Лист_контроля_домашних_работ_по_русскому_языку.docx
+FILE немного анализа рынка.docx
+FILE образец титула.docx
+FILE Олимпиада_2025.docx
+FILE орг.docx
+FILE Ответы на контрольные вопросы.docx
+FILE отчёт по япву.docx
+FILE Отчет .docx
+FILE Отчет по работе.docx
+FILE Отчет проект (2).docx
+FILE Отчет проект.docx
+FILE отчет.docx
+FILE Отчет_Лабораторная_1_Бойцов.docx
+FILE Отчет_Лабораторная_1_Полный_Бойцов.docx
+FILE Оценка договора (2).docx
+FILE Оценка договора (3).docx
+FILE Оценка договора.docx
+FILE Памятка_о_мерах_пожарной_безопасности_при_использовании_зарядных.docx
+FILE Паспорт5команда.docx
+FILE План_Задача2_ЛР1_Бойцов.docx
+FILE Позиционирование InvestorAI week 1.docx
+FILE Полином Жегалкина.docx
+FILE Примерные вопросы к зачету (2).docx
+FILE Примерные вопросы к зачету.docx
+FILE Расписка_о_персональных_данных_ИА.docx
+FILE РГР Графики(30 вариантов).docx
+FILE Резюме Решетилов Михаил_2025 (2).docx
+FILE Резюме Решетилов Михаил_2025 (3).docx
+FILE Резюме Решетилов Михаил_2025.docx
+FILE РефератБровкинБойцов (2).docx
+FILE РефератБровкинБойцов.docx
+FILE Соглашение_о_прекращении_сотрудничества_ИнвестРиск_Максим.docx
+FILE Соглашение_о_прекращении_сотрудничества_ИнвестРиск_Максим_ФИНАЛ (2).docx
+FILE Соглашение_о_прекращении_сотрудничества_ИнвестРиск_Максим_ФИНАЛ.docx
+FILE соц сети_1.docx
+FILE Список заданий на лаб гр_01.docx
+FILE теория мат анализ.docx
+FILE теория по структркам.docx
+FILE Технический RoadMap.docx
+FILE Титульник БМ.docx
+FILE титульник.docx
+FILE Титульный лист.docx
+FILE Титульный лист 2025.docx
+FILE Форма_соглашения_о_сотрудничестве_Лидерская_программа_Сила_сообществ.docx
+FILE Цена week1.docx
+FILE Шаблон отчета_ЭП_2026 (1).docx
+FILE Шаблон отчета_ЭП_2026 (2).docx
+FILE Шаблон отчета_ЭП_2026.docx
+COUNT 120
+'0. Инструкция.docx' 1072511
+'1. Что нужно собрать с клиента_.docx' 18173
+'2. Промт для генерации блоков ЛТ.docx' 19991
+'6bb0ef8b27bd17cbfe38f7e0de5e7d90.docx' 18249
+'7 сем (2).docx' 291167
+'7 сем.docx' 291167
+'8 сем (2).docx' 16838
+'8 сем.docx' 16838
+'8 семинар.docx' 18380
+'Efficient Production and Modern Automation (2).docx' 26843
+'Efficient Production and Modern Automation.docx' 26843
+'Great Britain.docx' 27567
+'Hobbies and Your future career .docx' 27117
+'Investor Roadmap.docx' 17590
+'InvestRisk_Roadmap_Final_Clean_v4 (2).docx' 47800
+'InvestRisk_Roadmap_Final_Clean_v4 (3).docx' 47800
+'InvestRisk_Roadmap_Final_Clean_v4.docx' 47800
+'IT lesson.docx' 16918
+'konspekt_маркетинг.docx' 34670
+'lab1.docx' 11438
+'Met_ukazania_Laba.docx' 388464
+'Project Solutions and Modern Production (2).docx' 29797
+'Project Solutions and Modern Production.docx' 29797
+'Russia (2).docx' 32646
+'Russia.docx' 32646
+'Scientific Achievements (2).docx' 28011
+'Scientific Achievements.docx' 28011
+'Seminar_Test_API_Бойцов.docx' 2262845
+'Seminar_Test_API_Попов.docx' 2275007
+'Seminar_Test_UI_1_Boytsov.docx' 2103871
+'Seminar_Test_UI_2_Boytsov.docx' 848706
+'Sources of Information.docx' 28549
+'Types of Energy.docx' 30020
+'What is Stress and How to Deal with It.docx' 28859
+'Аналитика хакатона Альфа.docx' 52581
+'Анкета.DOCX' 25111
+'Без имени 1.docx' 29306
+'бизнес_клуб_план.docx' 15573
+'Вывод по API.docx' 27870
+'вычитание с доп кодом.docx' 20355
+'Документ (5).docx' 15861
+'Древо сценариев.docx' 74881
+'Захват_Территории_и_прокачка_гипотез.docx' 132517
+'Зачет Прога.docx' 1360862
+'заявление на прием ИА.docx' 20689
+'Заявление по гос.службе ИА.docx' 21304
+'Заявление_на_новую_электронную_трудовую.docx' 13433
+'Заявление_на_перечисление_зарплаты_ИА.docx' 14294
+'Заявление_на_увольнение_версия_2026_1_1.docx' 15241
+'Заявление_о_допуске_к_конкурсному_отбору_09_03_01.docx' 19726
+'Заявление_о_переводе_на_ОП_ТОП_ИТпо_направлению_09_03_01.docx' 19307
+'ИнвестРиск_Нейросеть.docx' 22193
+'Информированное_согласие_МГТУ_СТАНКИН.docx' 2410591
+'Кейсы для экономики.docx' 62842
+'Комментарий вопросов к зачету (2).docx' 472451
+'Комментарий вопросов к зачету (3).docx' 482999
+'Комментарий вопросов к зачету.docx' 472958
+'конспект.docx' 4912170
+'Конфликты (2).docx' 15612
+'Конфликты.docx' 17883
+'Кругляцов_ЛР1_Вариант_5.docx' 26873
+'Кругляцов_ЛР2_База_собак_1.docx' 33027
+'Кругляцов_ЛР3_Вариант_6.docx' 27765
+'Кругляцов_ЛР4_Вариант_4.docx' 26239
+'Кругляцов_ЛР5_Общий_вариант.docx' 28046
+'Л4_Строки.docx' 22516
+'Лабараторная работа #1 Соболев.docx' 2481199
+'Лабораторная работа 1.docx' 3780918
+'Лабораторная_ПРОГРАММИРОВАНИЕ.docx' 713631
+'Линал.docx' 24857
+'Лист контроля БМ (2).docx' 20078
+'Лист контроля БМ.docx' 19713
+'Лист_контроля_домашних_работ_по_русскому_языку.docx' 19683
+'немного анализа рынка.docx' 993259
+'образец титула.docx' 25073
+'Олимпиада_2025.docx' 42873
+'орг.docx' 19047
+'Ответы на контрольные вопросы.docx' 65781
+'отчёт по япву.docx' 14967
+'Отчет .docx' 592179
+'Отчет по работе.docx' 20833
+'Отчет проект (2).docx' 179288
+'Отчет проект.docx' 179288
+'отчет.docx' 100791
+'Отчет_Лабораторная_1_Бойцов.docx' 497810
+'Отчет_Лабораторная_1_Полный_Бойцов.docx' 773303
+'Оценка договора (2).docx' 31017
+'Оценка договора (3).docx' 31017
+'Оценка договора.docx' 31017
+'Памятка_о_мерах_пожарной_безопасности_при_использовании_зарядных.docx' 22085
+'Паспорт5команда.docx' 21595
+'План_Задача2_ЛР1_Бойцов.docx' 39706
+'Позиционирование InvestorAI week 1.docx' 14222
+'Полином Жегалкина.docx' 149443
+'Примерные вопросы к зачету (2).docx' 15815
+'Примерные вопросы к зачету.docx' 25205
+'Расписка_о_персональных_данных_ИА.docx' 16220
+'РГР Графики(30 вариантов).docx' 420149
+'Резюме Решетилов Михаил_2025 (2).docx' 122136
+'Резюме Решетилов Михаил_2025 (3).docx' 122136
+'Резюме Решетилов Михаил_2025.docx' 122136
+'РефератБровкинБойцов (2).docx' 2451921
+'РефератБровкинБойцов.docx' 2451906
+'Соглашение_о_прекращении_сотрудничества_ИнвестРиск_Максим.docx' 49905
+'Соглашение_о_прекращении_сотрудничества_ИнвестРиск_Максим_ФИНАЛ (2).docx' 50587
+'Соглашение_о_прекращении_сотрудничества_ИнвестРиск_Максим_ФИНАЛ.docx' 47026
+'соц сети_1.docx' 31887
+'Список заданий на лаб гр_01.docx' 14721
+'теория мат анализ.docx' 901809
+'теория по структркам.docx' 1864451
+'Технический RoadMap.docx' 21369
+'Титульник БМ.docx' 36769
+'титульник.docx' 38313
+'Титульный лист.docx' 36785
+'Титульный лист 2025.docx' 24783
+'Форма_соглашения_о_сотрудничестве_Лидерская_программа_Сила_сообществ.docx' 16763
+'Цена week1.docx' 13376
+'Шаблон отчета_ЭП_2026 (1).docx' 21698
+'Шаблон отчета_ЭП_2026 (2).docx' 21698
+'Шаблон отчета_ЭП_2026.docx' 21698

@@ -164,8 +164,8 @@ class ModelConclusionTest(unittest.TestCase):
         self.assertIn("казначей", prompt)
         self.assertIn("14,0%", prompt)
         self.assertIn(shown_item.source_url, prompt)
-        self.assertNotIn(shown_item.title, prompt)
-        self.assertNotIn("55,5", prompt)
+        self.assertIn(shown_item.title, prompt)
+        self.assertIn("55,5", prompt)
         self.assertNotIn(hidden.title, prompt)
         self.assertNotIn("77,7", prompt)
         self.assertEqual(_bank_section(filled), _bank_section(card))
@@ -296,7 +296,8 @@ class ModelConclusionTest(unittest.TestCase):
         )
         self.assertEqual(len(client.prompts), 1)
         self.assertIn("Нагрузка на лизинг не снижается.", text)
-        self.assertNotIn("77,7", client.prompts[0])
+        self.assertIn(hidden.item.title, client.prompts[0])
+        self.assertIn("77,7", client.prompts[0])
         skipped = model_conclusion(
             company,
             hidden,
@@ -341,6 +342,43 @@ class ModelConclusionTest(unittest.TestCase):
         self.assertIn("не указана", parts["answer"])
         task = json.dumps({"дальше": "Проверить валютную позицию и график."}, ensure_ascii=False)
         self.assertEqual(reader_model_parts(task, source)["next"], "")
+        clumsy = json.dumps(
+            {
+                "последствия": (
+                    "Зарплатный проект и крупный штат делают чувствительной "
+                    "к ставке и стоимость фондирования."
+                ),
+            },
+            ensure_ascii=False,
+        )
+        summary = reader_model_parts(clumsy, source)["summary"]
+        self.assertNotIn("фондир", summary.casefold())
+        self.assertIn("чувствительными к ставке и к стоимости обслуживания долга", summary)
+
+    def test_prompt_keeps_a_digital_ruble_article_off_the_company_book(self) -> None:
+        from decision_brief.conclusion import build_model_prompt
+
+        company = CompanyProfile(
+            synthetic_u="U_trade",
+            industry="retail",
+            has_loan=True,
+            has_foreign_trade=True,
+            foreign_trade_countries="ТУРЦИЯ",
+        )
+        item = NewsItem(
+            title="Препятствия для внедрения цифрового рубля",
+            published_on=date(2026, 10, 7),
+            source_name="Ведомости",
+            source_url="https://example.test/digital",
+            summary="Цифровой рубль как платёжный инструмент.",
+        )
+        scored = ScoredItem(item, 1.0, Relevance.NOTICE, (), None)
+        prompt = build_model_prompt(company, scored, role=Role.OWNER)
+        self.assertIn(item.title, prompt)
+        self.assertIn("цифровой рубль", prompt.casefold())
+        self.assertNotIn("внешнеэкономическая", prompt)
+        self.assertNotIn("ТУРЦИЯ", prompt)
+        self.assertNotIn("флаги:", prompt)
 
 
 if __name__ == "__main__":

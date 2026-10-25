@@ -18,7 +18,8 @@ from typing import Protocol
 from urllib.parse import urlsplit
 
 from decision_brief.bank_cards import position_text
-from decision_brief.models import CompanyProfile, NewsItem, Relevance, ScoredItem
+from decision_brief.classify import household_mortgage, payment_ruble
+from decision_brief.models import CompanyProfile, Factor, NewsItem, Relevance, ScoredItem
 from decision_brief.pipeline import explain, explain_for_role
 from decision_brief.roles import ROLE_LABEL_RU, Role
 
@@ -92,7 +93,9 @@ _SYSTEM = (
     "Не поручение. Не начинай с «проверить», «подготовить», «оценить». "
     "«вопрос» — один короткий вопрос клиенту о факте его бизнеса, "
     "которого не хватает. "
-    "Слово «почему» не пиши. Остальные поля — одно или два ясных предложения, "
+    "Слово «почему» не пиши. Слово «фондирование» не пиши: для компании это "
+    "стоимость обслуживания кредита и лизинга. Согласуй падежи. "
+    "Остальные поля — одно или два ясных предложения, "
     "без воды и без одного длинного предложения на весь ответ. "
     "Без воды, без идентификаторов, кодов, английских слов и сырых сумм. "
     "Каждое число в значениях уже должно встречаться во входных полях. "
@@ -115,7 +118,9 @@ _ASK = (
     "индексации. Если горизонт банка — конец 2026, не пиши «минимум квартал». "
     "«дальше» — один будущий фактор: решение или срок прогноза, не поручение. "
     "«вопрос» — один вопрос клиенту, на который нельзя ответить из полей ниже. "
-    "Слово «почему» не пиши. Остальные поля — одно или два ясных предложения, "
+    "Слово «почему» не пиши. Слово «фондирование» не пиши: для компании это "
+    "стоимость обслуживания кредита и лизинга. Согласуй падежи. "
+    "Остальные поля — одно или два ясных предложения, "
     "без воды и без одного длинного предложения на весь ответ. "
     "Не повторяй идентификатор компании, коды, английские слова и сырую выручку. "
     "Позицию банка не переписывай. "
@@ -257,16 +262,20 @@ def build_model_prompt(
     *,
     role: Role | None,
 ) -> str:
-    """Prompt from fields that are already calculated.
+    """Prompt from the article and the fields that belong to it.
 
-    The news title and the article body are not included. Hidden items
-    are not passed in by the caller.
+    Hidden items are not passed in by the caller. Company flags that
+    are not the subject of this article are left out.
     """
     role_label = ROLE_LABEL_RU[role] if role is not None else "не задана"
     reasons = "; ".join(scored.reasons) if scored.reasons else "нет"
-    lines = (
+    story = f"{scored.item.title}\n{scored.item.summary}"
+    lines = [
         _ASK,
-        f"Компания: {_company_text(company)}",
+        f"Заголовок: {scored.item.title}",
+        f"Текст новости: {_clip(scored.item.summary)}",
+        _topic_rule(story),
+        f"Компания: {_company_text(company, story)}",
         f"Роль: {role_label}",
         f"Факторы: {_factor_text(scored.item)}",
         f"Причины: {reasons}",
@@ -275,9 +284,33 @@ def build_model_prompt(
         "Карточка банка — прогноз на свою дату. Если дата новости не раньше "
         "даты, которую карточка ещё только ожидает, это событие уже прошло. "
         "Не называй его ожидаемым и не пиши, что оно ещё подтвердится.",
+        "Вопрос клиенту задай только про пробел этой новости.",
         f"Ссылка на новость: {scored.item.source_url}",
-    )
+    ]
     return "\n".join(lines)
+
+
+def _clip(text: str) -> str:
+    """Keep the opening of the article. The card fact is this same opening."""
+    compact = " ".join(text.split())
+    if len(compact) <= 500:
+        return compact
+    return compact[:500].rsplit(" ", 1)[0]
+
+
+def _topic_rule(story: str) -> str:
+    """Tell the model which company facts are outside this article."""
+    if payment_ruble(story):
+        return (
+            "Событие — цифровой рубль. Не пиши про курс, кредит, лизинг "
+            "и страны торговли."
+        )
+    if household_mortgage(story):
+        return (
+            "Событие — семейная ипотека физических лиц. "
+            "Не называй кредит компании этой ипотекой и не пиши про валюту закупок."
+        )
+    return "Пиши только про это событие и те продукты компании, которых оно касается."
 
 
 def ground_model_answer(raw: str, source: str) -> str:
@@ -418,6 +451,24 @@ def _future_factor(payload: Mapping[str, object], allowed: set[Decimal]) -> str:
     return text
 
 
+_BROKEN_FUNDING = re.compile(
+    r"чувствительн\w*\s+к\s+ставке\s+и\s+стоимость\s+фондирования",
+    re.IGNORECASE,
+)
+_FUNDING_COST = re.compile(r"стоимост\w*\s+фондирования", re.IGNORECASE)
+_FUNDING_WORD = re.compile(r"фондировани\w*", re.IGNORECASE)
+
+
+def _plain_company_words(text: str) -> str:
+    """Say debt service, not bank funding, and keep the cases agreed."""
+    text = _BROKEN_FUNDING.sub(
+        "чувствительными к ставке и к стоимости обслуживания долга",
+        text,
+    )
+    text = _FUNDING_COST.sub("стоимость обслуживания долга", text)
+    return _FUNDING_WORD.sub("обслуживание долга", text)
+
+
 def _reader_field(
     payload: Mapping[str, object],
     keys: tuple[str, ...],
@@ -437,7 +488,7 @@ def _reader_field(
             continue
         if not visible.endswith((".", "?", "!")):
             visible = f"{visible}."
-        kept.append(visible)
+        kept.append(_plain_company_words(visible))
         if len(kept) == limit:
             break
     return " ".join(kept)
@@ -546,19 +597,27 @@ def _is_shown(scored: ScoredItem, shown: Sequence[ScoredItem]) -> bool:
 
 
 def _fresh_card_text(scored: ScoredItem) -> str:
+    story = f"{scored.item.title}\n{scored.item.summary}"
     card = scored.bank_card
-    if card is None or not card.fresh:
+    if payment_ruble(story) or card is None or not card.fresh:
         return "Свежей карточки банка по этому фактору нет."
+    if household_mortgage(story):
+        rate_lines = [row.text for row in card.theses if row.factor is Factor.RATE]
+        if not rate_lines:
+            return "Прогноз ключевой ставки в карточке не выделен."
+        return "Только путь ключевой ставки, без курса: " + " ".join(rate_lines)
     return position_text(card, scored.item)
 
 
-def _company_text(company: CompanyProfile) -> str:
+def _company_text(company: CompanyProfile, story: str = "") -> str:
     parts = [company.synthetic_u, f"отрасль {company.industry}"]
     if company.okved:
         parts.append(f"ОКВЭД {company.okved}")
     if company.revenue_rub is not None:
         rendered = format(company.revenue_rub, "f").rstrip("0").rstrip(".")
         parts.append(f"выручка {rendered}")
+    if payment_ruble(story) or household_mortgage(story):
+        return ", ".join(parts)
     flags = _flag_names(company)
     if flags:
         parts.append("флаги: " + ", ".join(flags))

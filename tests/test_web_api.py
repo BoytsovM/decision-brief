@@ -63,6 +63,9 @@ class FeedPayloadTest(unittest.TestCase):
         self.assertIn("Материал банка", str(card["bank"]))
         self.assertNotIn("паузу", next_text.casefold())
         self.assertIn("прогноз банка", next_text.casefold())
+        self.assertNotIn("держит", next_text.casefold())
+        self.assertNotIn("только", next_text.casefold())
+        self.assertNotIn("Ставка: 14,0%", str(card["bank"]))
         self.assertNotIn("ОКВЭД", str(card["why"]))
         self.assertNotIn("парк на бензине", risk_text.casefold())
         self.assertIn("Банк России", str(row["source_name"]))
@@ -77,6 +80,33 @@ class FeedPayloadTest(unittest.TestCase):
 
     def test_plain_text_strips_markup(self) -> None:
         self.assertEqual(plain_text("<b>Ставка</b>  <!--x-->  14"), "Ставка 14")
+
+    def test_forecast_is_not_told_as_a_decision_already_taken(self) -> None:
+        from decision_brief.models import CompanyProfile, Factor, NewsItem
+        from decision_brief.web_api import _event_link
+
+        company = CompanyProfile("U", "розница", has_loan=True, has_leasing=True)
+        forecast = NewsItem(
+            "Ставка",
+            date(2026, 10, 21),
+            "t",
+            "https://example.invalid/forecast",
+            "ЦБ, скорее всего, сохранит ключевую ставку.",
+            {Factor.RATE: 2},
+        )
+        decided = NewsItem(
+            "Ставка",
+            date(2026, 10, 23),
+            "t",
+            "https://example.invalid/decided",
+            "Банк России оставил ключевую ставку на уровне 14%.",
+            {Factor.RATE: 2},
+        )
+        forecast_link = _event_link(company, forecast)
+        decided_link = _event_link(company, decided)
+        self.assertIn("ещё не принято", forecast_link)
+        self.assertNotIn("сохраняют", forecast_link)
+        self.assertIn("уже сохранили", decided_link)
 
     def test_fact_leaves_out_the_outlet_redirect(self) -> None:
         text = (
@@ -200,6 +230,67 @@ class QuestionGateTest(unittest.TestCase):
     def test_a_statement_is_not_a_question(self) -> None:
         page = "Ключевая ставка и лизинг."
         self.assertIn("Сформулируйте", question_on_page("Ставка высокая для лизинга", page))
+
+    def test_digital_ruble_and_family_mortgage_stay_on_their_subject(self) -> None:
+        from decision_brief.bank_cards import latest_card_for
+        from decision_brief.models import CompanyProfile, Factor, NewsItem, Relevance, ScoredItem
+        from decision_brief.web_api import _bank_for_reader, _event_link, _horizon_rows
+
+        company = CompanyProfile(
+            "U",
+            "розница",
+            has_loan=True,
+            has_leasing=True,
+            has_foreign_trade=True,
+            foreign_trade_countries="ТУРЦИЯ, Нидерланды",
+        )
+        digital = NewsItem(
+            "Бизнес назвал препятствия для внедрения цифрового рубля",
+            date(2026, 10, 7),
+            "Ведомости",
+            "https://example.invalid/digital-ruble",
+            "Закон о цифровом рубле.",
+            {},
+        )
+        mortgage = NewsItem(
+            "ЦБ уточнил расчеты ставки по семейной ипотеке",
+            date(2026, 10, 7),
+            "Ведомости",
+            "https://example.invalid/mortgage",
+            "Потолок по семейной ипотеке считается от ключевой ставки.",
+            {Factor.RATE: 3},
+        )
+        digital_link = _event_link(company, digital)
+        self.assertIn("цифровой рубль", digital_link)
+        self.assertNotIn("ТУРЦИЯ", digital_link)
+        self.assertNotIn("Нидерланд", digital_link)
+        mortgage_link = _event_link(company, mortgage)
+        self.assertIn("семейную ипотеку", mortgage_link)
+        self.assertNotIn("плавающ", mortgage_link)
+        card = latest_card_for(Factor.RATE)
+        digital_row = ScoredItem(digital, 1.0, Relevance.IMPORTANT, (), card)
+        mortgage_row = ScoredItem(mortgage, 1.0, Relevance.IMPORTANT, (), card)
+        digital_bank = _bank_for_reader(digital_row)
+        self.assertIn("нет", digital_bank.casefold())
+        self.assertNotIn("87,2", digital_bank)
+        mortgage_bank = _bank_for_reader(mortgage_row)
+        self.assertNotIn("87,2", mortgage_bank)
+        self.assertIn("14,0%", mortgage_bank)
+        horizon = _horizon_rows(mortgage_row)
+        self.assertEqual(len(horizon), 1)
+        self.assertIn("семейной ипотеки", horizon[0]["text"])
+        self.assertNotIn("платеж", horizon[0]["text"])
+        self.assertEqual(_horizon_rows(digital_row), [])
+        mentioned = NewsItem(
+            "Выдачи ипотеки выросли в 2,7 раза в январе",
+            date(2026, 1, 20),
+            "Ведомости",
+            "https://example.invalid/issuance",
+            "Спрос поддерживается опасениями ужесточения условий семейной ипотеки.",
+            {Factor.DEMAND: 2},
+        )
+        mentioned_link = _event_link(company, mentioned)
+        self.assertNotIn("семейную ипотеку физических лиц", mentioned_link)
 
 
 def _titles(payload: dict[str, object]) -> list[str]:
